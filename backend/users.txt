@@ -1,0 +1,3 @@
+admin:password123:
+user:userpass:
+demo:demo123:
