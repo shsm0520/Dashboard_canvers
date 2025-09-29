@@ -48,6 +48,25 @@ export const initializeDatabase = (): Promise<void> => {
         )
       `);
 
+      // Tasks table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
+          title TEXT NOT NULL,
+          description TEXT,
+          type TEXT NOT NULL DEFAULT 'other',
+          course TEXT,
+          due_date DATE NOT NULL,
+          due_time TEXT,
+          priority TEXT NOT NULL DEFAULT 'medium',
+          completed BOOLEAN DEFAULT FALSE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      `);
+
       // Health status logs table
       db.run(`
         CREATE TABLE IF NOT EXISTS health_logs (
