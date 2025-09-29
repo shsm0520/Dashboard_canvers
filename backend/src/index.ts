@@ -2,7 +2,14 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
-import { initializeDatabase, runQuery, getQuery, getAllQuery, migrateUsersFromFile, closeDatabase } from './database';
+import {
+  initializeDatabase,
+  runQuery,
+  getQuery,
+  getAllQuery,
+  migrateUsersFromFile,
+  closeDatabase,
+} from "./database";
 
 dotenv.config();
 
@@ -43,30 +50,534 @@ interface Course {
   updated_at: string;
 }
 
+interface Task {
+  id: number;
+  user_id: number;
+  title: string;
+  description?: string;
+  type:
+    | "assignment"
+    | "exam"
+    | "project"
+    | "meeting"
+    | "study"
+    | "deadline"
+    | "other";
+  course?: string;
+  due_date: string;
+  due_time?: string;
+  priority: "high" | "medium" | "low";
+  completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // Database helper functions
 const getUserByUsername = async (username: string): Promise<User | null> => {
-  return await getQuery('SELECT * FROM users WHERE username = ?', [username]);
+  return await getQuery("SELECT * FROM users WHERE username = ?", [username]);
 };
 
 const getUserById = async (id: number): Promise<User | null> => {
-  return await getQuery('SELECT * FROM users WHERE id = ?', [id]);
+  return await getQuery("SELECT * FROM users WHERE id = ?", [id]);
 };
 
-const updateUserCanvasToken = async (userId: number, canvasToken: string | null): Promise<boolean> => {
+const updateUserCanvasToken = async (
+  userId: number,
+  canvasToken: string | null
+): Promise<boolean> => {
   try {
     await runQuery(
-      'UPDATE users SET canvas_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      "UPDATE users SET canvas_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
       [canvasToken, userId]
     );
     return true;
   } catch (error) {
-    console.error('Error updating canvas token:', error);
+    console.error("Error updating canvas token:", error);
     return false;
   }
 };
 
 const getUserCourses = async (userId: number): Promise<Course[]> => {
-  return await getAllQuery('SELECT * FROM courses WHERE user_id = ?', [userId]);
+  return await getAllQuery("SELECT * FROM courses WHERE user_id = ?", [userId]);
+};
+
+const getUserTasks = async (
+  userId: number,
+  startDate?: string,
+  endDate?: string
+): Promise<Task[]> => {
+  let query = "SELECT * FROM tasks WHERE user_id = ?";
+  const params: any[] = [userId];
+
+  if (startDate && endDate) {
+    query += " AND due_date BETWEEN ? AND ?";
+    params.push(startDate, endDate);
+  }
+
+  query += " ORDER BY due_date ASC, due_time ASC";
+  return await getAllQuery(query, params);
+};
+
+const createTask = async (
+  task: Omit<Task, "id" | "created_at" | "updated_at">
+): Promise<number> => {
+  const result = await runQuery(
+    "INSERT INTO tasks (user_id, title, description, type, course, due_date, due_time, priority, completed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [
+      task.user_id,
+      task.title,
+      task.description,
+      task.type,
+      task.course,
+      task.due_date,
+      task.due_time,
+      task.priority,
+      task.completed,
+    ]
+  );
+  return result.id;
+};
+
+const updateTask = async (
+  taskId: number,
+  userId: number,
+  updates: Partial<Task>
+): Promise<boolean> => {
+  try {
+    const setClauses = [];
+    const params = [];
+
+    if (updates.title !== undefined) {
+      setClauses.push("title = ?");
+      params.push(updates.title);
+    }
+    if (updates.description !== undefined) {
+      setClauses.push("description = ?");
+      params.push(updates.description);
+    }
+    if (updates.type !== undefined) {
+      setClauses.push("type = ?");
+      params.push(updates.type);
+    }
+    if (updates.course !== undefined) {
+      setClauses.push("course = ?");
+      params.push(updates.course);
+    }
+    if (updates.due_date !== undefined) {
+      setClauses.push("due_date = ?");
+      params.push(updates.due_date);
+    }
+    if (updates.due_time !== undefined) {
+      setClauses.push("due_time = ?");
+      params.push(updates.due_time);
+    }
+    if (updates.priority !== undefined) {
+      setClauses.push("priority = ?");
+      params.push(updates.priority);
+    }
+    if (updates.completed !== undefined) {
+      setClauses.push("completed = ?");
+      params.push(updates.completed);
+    }
+
+    if (setClauses.length === 0) {
+      return false;
+    }
+
+    setClauses.push("updated_at = CURRENT_TIMESTAMP");
+    params.push(taskId, userId);
+
+    const query = `UPDATE tasks SET ${setClauses.join(
+      ", "
+    )} WHERE id = ? AND user_id = ?`;
+    const result = await runQuery(query, params);
+    return result.changes > 0;
+  } catch (error) {
+    console.error("Error updating task:", error);
+    return false;
+  }
+};
+
+const deleteTask = async (taskId: number, userId: number): Promise<boolean> => {
+  try {
+    const result = await runQuery(
+      "DELETE FROM tasks WHERE id = ? AND user_id = ?",
+      [taskId, userId]
+    );
+    return result.changes > 0;
+  } catch (error) {
+    console.error("Error deleting task:", error);
+    return false;
+  }
+};
+
+// Canvas API integration
+interface CanvasCourse {
+  id: number;
+  longName: string;
+  shortName: string;
+  courseCode: string;
+  term: string | null;
+  subtitle?: string;
+  enrollmentState?: string;
+  enrollmentType?: string;
+  published?: boolean;
+}
+
+interface CanvasAssignment {
+  id: number;
+  name: string;
+  description?: string;
+  course_id: number;
+  due_at: string | null;
+  unlock_at?: string | null;
+  lock_at?: string | null;
+  points_possible?: number;
+  submission_types: string[];
+  assignment_group_id: number;
+  published: boolean;
+  workflow_state: string;
+  html_url: string;
+  has_submitted_submissions?: boolean;
+}
+
+interface CanvasPlannerItem {
+  context_type: string;
+  context_name: string;
+  plannable_type: string;
+  plannable: {
+    id: number;
+    title: string;
+    assignment_id?: number;
+    due_at: string | null;
+    points_possible?: number;
+    html_url: string;
+  };
+  plannable_date: string;
+  submissions?: any;
+}
+
+const fetchCanvasCourses = async (
+  canvasToken: string
+): Promise<CanvasCourse[]> => {
+  try {
+    const response = await fetch(
+      "https://uc.instructure.com/api/v1/dashboard/dashboard_cards",
+      {
+        headers: {
+          Authorization: `Bearer ${canvasToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Canvas API error: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const courses: CanvasCourse[] = await response.json();
+
+    // Filter out courses with null term
+    return courses.filter((c) => c.term !== null && c.term !== "Communities");
+  } catch (error) {
+    console.error("Error fetching Canvas courses:", error);
+    throw error;
+  }
+};
+
+const fetchCanvasAssignments = async (
+  canvasToken: string,
+  courseId: number
+): Promise<CanvasAssignment[]> => {
+  try {
+    const response = await fetch(
+      `https://uc.instructure.com/api/v1/courses/${courseId}/assignments`,
+      {
+        headers: {
+          Authorization: `Bearer ${canvasToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Canvas API error: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const assignments: CanvasAssignment[] = await response.json();
+
+    // Filter out unpublished assignments and those without due dates
+    return assignments.filter((assignment) =>
+      assignment.published &&
+      assignment.due_at &&
+      assignment.workflow_state === 'published'
+    );
+  } catch (error) {
+    console.error(`Error fetching Canvas assignments for course ${courseId}:`, error);
+    throw error;
+  }
+};
+
+const fetchCanvasPlannerItems = async (
+  canvasToken: string,
+  startDate: string,
+  endDate: string
+): Promise<CanvasPlannerItem[]> => {
+  try {
+    // Try different API approaches that match Canvas dashboard
+    const urls = [
+      `https://uc.instructure.com/api/v1/planner/items?start_date=${startDate}&end_date=${endDate}`,
+      `https://uc.instructure.com/api/v1/planner/items?start_date=${startDate}&end_date=${endDate}&context_codes[]=course&filter=new_activity`
+    ];
+
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Authorization: `Bearer ${canvasToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          console.warn(`Planner API ${url} failed with ${response.status}`);
+          continue;
+        }
+
+        const items: CanvasPlannerItem[] = await response.json();
+        console.log(`Fetched ${items.length} planner items from ${url}`);
+
+        // Log all items to see what we're getting
+        console.log(`\n=== ALL PLANNER ITEMS DEBUG ===`);
+        items.forEach((item, index) => {
+          console.log(`Item ${index + 1}:`);
+          console.log(`  - plannable_type: ${item.plannable_type}`);
+          console.log(`  - context_type: ${item.context_type}`);
+          console.log(`  - title: ${item.plannable?.title}`);
+          console.log(`  - due_at: ${item.plannable?.due_at}`);
+          console.log(`  - context_name: ${item.context_name}`);
+        });
+        console.log(`===============================\n`);
+
+        // Filter for assignments only (relaxed conditions)
+        const assignments = items.filter((item) =>
+          item.plannable_type === 'assignment' &&
+          item.plannable?.due_at
+        );
+
+        console.log(`Filtered to ${assignments.length} assignment items`);
+        return assignments;
+      } catch (error) {
+        console.warn(`Failed to fetch from ${url}:`, error);
+        continue;
+      }
+    }
+
+    throw new Error("All planner API endpoints failed");
+  } catch (error) {
+    console.error("Error fetching Canvas planner items:", error);
+    throw error;
+  }
+};
+
+// Helper function to extract date from Canvas API timestamp
+const extractDateFromCanvasTimestamp = (
+  timestampString: string,
+  clientTimezone?: string,
+  clientOffset?: number
+): string => {
+  console.log(`\n=== Canvas Date Parsing ===`);
+  console.log(`Original timestamp: ${timestampString}`);
+
+  // Method 1: Remove Z and parse as local time
+  const withoutZ = timestampString.replace(/Z$/, '');
+  const localDate = new Date(withoutZ);
+  const method1 = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+
+  // Method 2: Parse as UTC and extract components directly
+  const utcDate = new Date(timestampString);
+  const method2 = `${utcDate.getFullYear()}-${String(utcDate.getMonth() + 1).padStart(2, '0')}-${String(utcDate.getDate()).padStart(2, '0')}`;
+
+  // Method 3: Parse as UTC and convert to Eastern Time
+  const easternDate = new Date(utcDate.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const method3 = `${easternDate.getFullYear()}-${String(easternDate.getMonth() + 1).padStart(2, '0')}-${String(easternDate.getDate()).padStart(2, '0')}`;
+
+  console.log(`Method 1 (no Z, local): ${method1}`);
+  console.log(`Method 2 (UTC components): ${method2}`);
+  console.log(`Method 3 (UTC->Eastern): ${method3}`);
+
+  // For now, let's try Method 3 (proper timezone conversion)
+  console.log(`Using Method 3: ${method3}`);
+  console.log(`=========================\n`);
+
+  return method3;
+};
+
+const syncCanvasAssignmentsToTasks = async (
+  userId: number,
+  assignments: CanvasAssignment[],
+  courseName: string,
+  clientTimezone?: string,
+  clientOffset?: number
+): Promise<void> => {
+  try {
+    for (const assignment of assignments) {
+      if (!assignment.due_at) continue;
+
+      const dueDate = new Date(assignment.due_at);
+      // Extract date from Canvas timestamp (may be local time with Z suffix)
+      const dueDateStr = extractDateFromCanvasTimestamp(assignment.due_at, clientTimezone, clientOffset);
+
+      const dueTimeStr = dueDate.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      }); // HH:MM
+
+      // Check if task already exists (by user, title, and course only)
+      const existingTask = await getQuery(
+        "SELECT id, due_date FROM tasks WHERE user_id = ? AND title = ? AND course = ?",
+        [userId, assignment.name, courseName]
+      );
+
+      if (!existingTask) {
+        console.log(`Creating task: ${assignment.name} - Due: ${dueDateStr} at ${dueTimeStr}`);
+        await createTask({
+          user_id: userId,
+          title: assignment.name,
+          description: assignment.description || undefined,
+          type: 'assignment',
+          course: courseName || undefined,
+          due_date: dueDateStr,
+          due_time: dueTimeStr || undefined,
+          priority: 'medium', // Default priority
+          completed: false, // Set to false by default, user can manually mark as completed
+        });
+      } else {
+        console.log(`Task exists: ${assignment.name} - Current due_date in DB: ${existingTask.due_date}, New: ${dueDateStr}`);
+        // Update existing task with new due date (keep current completion status)
+        await runQuery(
+          "UPDATE tasks SET due_date = ?, due_time = ? WHERE id = ?",
+          [dueDateStr, dueTimeStr, existingTask.id]
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error syncing Canvas assignments to tasks:", error);
+    throw error;
+  }
+};
+
+const syncCanvasPlannerItemsToTasks = async (
+  userId: number,
+  plannerItems: CanvasPlannerItem[],
+  clientTimezone?: string,
+  clientOffset?: number
+): Promise<void> => {
+  try {
+    for (const item of plannerItems) {
+      if (!item.plannable.due_at) continue;
+
+      const dueDate = new Date(item.plannable.due_at);
+      // Extract date from Canvas timestamp (may be local time with Z suffix)
+      const dueDateStr = extractDateFromCanvasTimestamp(item.plannable.due_at, clientTimezone, clientOffset);
+
+      const dueTimeStr = dueDate.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      }); // HH:MM
+
+      // Check if task already exists (by user, title, and course only)
+      const existingTask = await getQuery(
+        "SELECT id, due_date FROM tasks WHERE user_id = ? AND title = ? AND course = ?",
+        [userId, item.plannable.title, item.context_name]
+      );
+
+      // Check if submission exists and is submitted
+      const hasSubmission = item.submissions &&
+                           item.submissions.submitted &&
+                           item.submissions.submitted === true;
+
+      if (!existingTask) {
+        await createTask({
+          user_id: userId,
+          title: item.plannable.title,
+          description: undefined,
+          type: 'assignment',
+          course: item.context_name || undefined,
+          due_date: dueDateStr,
+          due_time: dueTimeStr || undefined,
+          priority: 'medium', // Default priority
+          completed: hasSubmission || false,
+        });
+      } else {
+        console.log(`Task exists: ${item.plannable.title} - Current due_date in DB: ${existingTask.due_date}, New: ${dueDateStr}`);
+        // Update existing task with new due date and completion status
+        await runQuery(
+          "UPDATE tasks SET completed = ?, due_date = ?, due_time = ? WHERE id = ?",
+          [hasSubmission || false, dueDateStr, dueTimeStr, existingTask.id]
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error syncing Canvas planner items to tasks:", error);
+    throw error;
+  }
+};
+
+const syncCanvasCoursesToDatabase = async (
+  userId: number,
+  canvasCourses: CanvasCourse[]
+): Promise<void> => {
+  try {
+    // Clear existing Canvas courses for this user
+    await runQuery(
+      "DELETE FROM courses WHERE user_id = ? AND canvas_course_id IS NOT NULL",
+      [userId]
+    );
+
+    // Insert new courses from Canvas
+    for (const course of canvasCourses) {
+      // Parse course name and code
+      let courseName = course.shortName || course.longName;
+      let courseCode = "N/A";
+
+      // Try to extract course code from the name
+      const nameMatch = courseName.match(/([A-Z]{2,6}\s?\d{4})/);
+      if (nameMatch) {
+        courseCode = nameMatch[1];
+      } else {
+        // Fallback to parsing courseCode field
+        const courseCodeParts = course.courseCode.split("_");
+        if (courseCodeParts.length > 1) {
+          const codePart = courseCodeParts[1];
+          const codeMatch = codePart.match(/([A-Z]{2,6}\d{4})/);
+          if (codeMatch) {
+            courseCode = codeMatch[1];
+          }
+        }
+      }
+
+      // Clean up course name - remove term info and extra details
+      courseName = courseName
+        .replace(/^\([^)]*\)\s*/, "") // Remove term prefix like (25FS-Full)
+        .replace(/\s*\(\d+\)\s*$/, "") // Remove trailing (001) section numbers
+        .trim();
+
+      await runQuery(
+        "INSERT INTO courses (user_id, name, canvas_course_id, professor, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        [userId, courseName, course.id.toString(), courseCode]
+      );
+    }
+  } catch (error) {
+    console.error("Error syncing Canvas courses to database:", error);
+    throw error;
+  }
 };
 
 // JWT Authentication Middleware
@@ -126,8 +637,9 @@ app.get("/api/me", authenticateToken, async (req, res) => {
       user: {
         username: user.username,
         hasCanvasToken: !!user.canvas_token,
-        canvasTokenPreview: user.canvas_token ?
-          user.canvas_token.substring(0, 10) + '...' : null
+        canvasTokenPreview: user.canvas_token
+          ? user.canvas_token.substring(0, 10) + "..."
+          : null,
       },
       authenticated: true,
     });
@@ -139,11 +651,75 @@ app.get("/api/me", authenticateToken, async (req, res) => {
 
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
+  const clientTimezone = req.headers['x-client-timezone'] as string;
+  const clientOffset = req.headers['x-client-timezone-offset'] ?
+    parseInt(req.headers['x-client-timezone-offset'] as string) : undefined;
 
   try {
     const user = await getUserByUsername(username);
 
     if (user && user.password === password) {
+      // Auto-sync Canvas courses and assignments if user has a token
+      if (user.canvas_token) {
+        try {
+          // Sync courses
+          const canvasCourses = await fetchCanvasCourses(user.canvas_token);
+          await syncCanvasCoursesToDatabase(user.id, canvasCourses);
+          console.log(`Auto-synced ${canvasCourses.length} Canvas courses for ${username}`);
+
+          // Use Canvas Planner API for assignments (more accurate to dashboard view)
+          // Match frontend calendar range: -1 week to +3 weeks (4 weeks total)
+          const today = new Date();
+
+          // Get Monday of current week
+          const getMonday = (date: Date): Date => {
+            const newDate = new Date(date);
+            const day = newDate.getDay();
+            const diff = newDate.getDate() - day + (day === 0 ? -6 : 1);
+            newDate.setDate(diff);
+            return newDate;
+          };
+
+          // Get wider date range: 2 months ago to 3 months from now
+          const startDate = new Date(today);
+          startDate.setMonth(today.getMonth() - 2);
+          const endDate = new Date(today);
+          endDate.setMonth(today.getMonth() + 3);
+
+          const startDateStr = startDate.toISOString().split('T')[0];
+          const endDateStr = endDate.toISOString().split('T')[0];
+
+          // Use Course Assignments API directly (Planner API doesn't return assignments)
+          console.log(`Using Course Assignments API for all ${canvasCourses.length} courses...`);
+
+          let totalAssignments = 0;
+          for (const course of canvasCourses) {
+            try {
+              const assignments = await fetchCanvasAssignments(user.canvas_token, course.id);
+              const cleanCourseName = (course.shortName || course.longName)
+                .replace(/^\([^)]*\)\s*/, "")
+                .replace(/\s*\(\d+\)\s*$/, "")
+                .trim();
+
+              console.log(`\n=== COURSE ASSIGNMENTS API (${cleanCourseName}) ===`);
+              assignments.forEach(assignment => {
+                console.log(`Assignment: ${assignment.name} - Due: ${assignment.due_at}`);
+              });
+              console.log(`=================================================\n`);
+
+              await syncCanvasAssignmentsToTasks(user.id, assignments, cleanCourseName, clientTimezone, clientOffset);
+              totalAssignments += assignments.length;
+            } catch (error) {
+              console.warn(`Failed to sync assignments for course ${course.id}:`, error);
+            }
+          }
+          console.log(`Auto-synced ${totalAssignments} Canvas assignments for ${username}`);
+        } catch (error) {
+          console.warn(`Failed to auto-sync Canvas data for ${username}:`, error);
+          // Continue with login even if Canvas sync fails
+        }
+      }
+
       // Generate JWT token
       const token = jwt.sign({ userId: username }, JWT_SECRET, {
         expiresIn: "24h",
@@ -195,6 +771,220 @@ app.get("/api/courses", authenticateToken, async (req, res) => {
   }
 });
 
+// Sync Canvas courses endpoint
+app.post("/api/sync-canvas-courses", authenticateToken, async (req, res) => {
+  try {
+    const user = await getUserByUsername(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.canvas_token) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Canvas token is required. Please add your Canvas API token first.",
+      });
+    }
+
+    // Fetch courses from Canvas
+    const canvasCourses = await fetchCanvasCourses(user.canvas_token);
+
+    // Sync to database
+    await syncCanvasCoursesToDatabase(user.id, canvasCourses);
+
+    // Return the synced courses
+    const updatedCourses = await getUserCourses(user.id);
+
+    res.json({
+      success: true,
+      message: `Successfully synced ${canvasCourses.length} courses from Canvas`,
+      courses: updatedCourses,
+      canvasCoursesCount: canvasCourses.length,
+    });
+  } catch (error) {
+    console.error("Error syncing Canvas courses:", error);
+
+    if (error instanceof Error) {
+      if (error.message.includes("Canvas API error: 401")) {
+        res.status(401).json({
+          success: false,
+          message:
+            "Canvas API token is invalid or expired. Please update your token.",
+        });
+      } else if (error.message.includes("Canvas API error")) {
+        res.status(502).json({
+          success: false,
+          message: "Unable to connect to Canvas. Please try again later.",
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: "Internal server error while syncing courses",
+        });
+      }
+    } else {
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+});
+
+// Clear all tasks and re-sync from Canvas
+app.post("/api/reset-and-sync-canvas", authenticateToken, async (req, res) => {
+  try {
+    const clientTimezone = req.headers['x-client-timezone'] as string;
+    const clientOffset = req.headers['x-client-timezone-offset'] ?
+      parseInt(req.headers['x-client-timezone-offset'] as string) : undefined;
+
+    const user = await getUserByUsername(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.canvas_token) {
+      return res.status(400).json({
+        success: false,
+        message: "Canvas token is required. Please add your Canvas API token first.",
+      });
+    }
+
+    // STEP 1: Clear all existing tasks for this user
+    console.log(`Clearing all tasks for user ${user.username}...`);
+    await runQuery("DELETE FROM tasks WHERE user_id = ?", [user.id]);
+    console.log(`All tasks cleared for user ${user.username}`);
+
+    // STEP 2: Re-sync everything from Canvas
+    console.log(`Re-syncing Canvas data for user ${user.username}...`);
+
+    // Sync courses first
+    const canvasCourses = await fetchCanvasCourses(user.canvas_token);
+    await syncCanvasCoursesToDatabase(user.id, canvasCourses);
+    console.log(`Re-synced ${canvasCourses.length} Canvas courses`);
+
+    // Use extended date range to capture all assignments
+    const today = new Date();
+
+    // Get wider date range: 2 months ago to 3 months from now
+    const startDate = new Date(today);
+    startDate.setMonth(today.getMonth() - 2);
+    const endDate = new Date(today);
+    endDate.setMonth(today.getMonth() + 3);
+
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    let assignmentCount = 0;
+
+    // Use Course Assignments API directly (Planner API doesn't return assignments)
+    console.log(`Using Course Assignments API for all ${canvasCourses.length} courses...`);
+
+    for (const course of canvasCourses) {
+      try {
+        const assignments = await fetchCanvasAssignments(user.canvas_token, course.id);
+        const cleanCourseName = (course.shortName || course.longName)
+          .replace(/^\([^)]*\)\s*/, "")
+          .replace(/\s*\(\d+\)\s*$/, "")
+          .trim();
+
+        console.log(`\n=== COURSE ASSIGNMENTS API (${cleanCourseName}) ===`);
+        assignments.forEach(assignment => {
+          console.log(`Assignment: ${assignment.name} - Due: ${assignment.due_at}`);
+        });
+        console.log(`=================================================\n`);
+
+        await syncCanvasAssignmentsToTasks(user.id, assignments, cleanCourseName, clientTimezone, clientOffset);
+        assignmentCount += assignments.length;
+      } catch (error) {
+        console.warn(`Failed to sync assignments for course ${course.id}:`, error);
+      }
+    }
+    console.log(`Re-synced ${assignmentCount} assignments from Course Assignments API`);
+
+    res.json({
+      success: true,
+      message: `Successfully reset and re-synced all data. ${canvasCourses.length} courses and ${assignmentCount} assignments synced.`,
+      courses: canvasCourses.length,
+      assignments: assignmentCount
+    });
+
+  } catch (error) {
+    console.error("Error in reset and sync:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to reset and sync Canvas data",
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
+// Sync Canvas assignments endpoint
+app.post("/api/sync-canvas-assignments", authenticateToken, async (req, res) => {
+  try {
+    const clientTimezone = req.headers['x-client-timezone'] as string;
+    const clientOffset = req.headers['x-client-timezone-offset'] ?
+      parseInt(req.headers['x-client-timezone-offset'] as string) : undefined;
+
+    const user = await getUserByUsername(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.canvas_token) {
+      return res.status(400).json({
+        success: false,
+        message: "Canvas token is required. Please add your Canvas API token first.",
+      });
+    }
+
+    // Use Canvas Course Assignments API directly (Planner API only returns announcements)
+    const today = new Date();
+
+    // Get wider date range: 2 months ago to 3 months from now
+    const startDate = new Date(today);
+    startDate.setMonth(today.getMonth() - 2);
+    const endDate = new Date(today);
+    endDate.setMonth(today.getMonth() + 3);
+
+    let assignmentCount = 0;
+
+    // Fetch all courses and their assignments
+    const canvasCourses = await fetchCanvasCourses(user.canvas_token);
+    console.log(`Found ${canvasCourses.length} Canvas courses`);
+
+    for (const course of canvasCourses) {
+      try {
+        const assignments = await fetchCanvasAssignments(user.canvas_token, course.id);
+        console.log(`Course ${course.id} (${course.longName}): ${assignments.length} assignments`);
+
+        const cleanCourseName = (course.shortName || course.longName)
+          .replace(/^\([^)]*\)\s*/, "")
+          .replace(/\s*\(\d+\)\s*$/, "")
+          .trim();
+
+        await syncCanvasAssignmentsToTasks(user.id, assignments, cleanCourseName, clientTimezone, clientOffset);
+        assignmentCount += assignments.length;
+      } catch (error) {
+        console.warn(`Failed to sync assignments for course ${course.id}:`, error);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully synced ${assignmentCount} assignments from Canvas`,
+      assignmentCount: assignmentCount,
+    });
+  } catch (error) {
+    console.error("Error syncing Canvas assignments:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while syncing assignments",
+    });
+  }
+});
+
 app.get("/api/profile", authenticateToken, async (req, res) => {
   try {
     const user = await getUserByUsername(req.user!.userId);
@@ -206,11 +996,12 @@ app.get("/api/profile", authenticateToken, async (req, res) => {
       profile: {
         username: user.username,
         email: user.email,
-        joinDate: user.join_date?.split('T')[0] || "2024-01-01",
+        joinDate: user.join_date?.split("T")[0] || "2024-01-01",
         role: user.role,
         hasCanvasToken: !!user.canvas_token,
-        canvasTokenPreview: user.canvas_token ?
-          user.canvas_token.substring(0, 10) + '...' : null
+        canvasTokenPreview: user.canvas_token
+          ? user.canvas_token.substring(0, 10) + "..."
+          : null,
       },
     });
   } catch (error) {
@@ -223,17 +1014,17 @@ app.get("/api/profile", authenticateToken, async (req, res) => {
 app.put("/api/canvas-token", authenticateToken, async (req, res) => {
   const { canvasToken } = req.body;
 
-  if (!canvasToken || typeof canvasToken !== 'string') {
+  if (!canvasToken || typeof canvasToken !== "string") {
     return res.status(400).json({
       success: false,
-      message: 'Canvas token is required and must be a string'
+      message: "Canvas token is required and must be a string",
     });
   }
 
   if (canvasToken.length < 10) {
     return res.status(400).json({
       success: false,
-      message: 'Canvas token appears to be invalid (too short)'
+      message: "Canvas token appears to be invalid (too short)",
     });
   }
 
@@ -242,7 +1033,7 @@ app.put("/api/canvas-token", authenticateToken, async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
@@ -251,20 +1042,20 @@ app.put("/api/canvas-token", authenticateToken, async (req, res) => {
     if (success) {
       res.json({
         success: true,
-        message: 'Canvas token updated successfully',
-        canvasTokenPreview: canvasToken.substring(0, 10) + '...'
+        message: "Canvas token updated successfully",
+        canvasTokenPreview: canvasToken.substring(0, 10) + "...",
       });
     } else {
       res.status(500).json({
         success: false,
-        message: 'Failed to save Canvas token'
+        message: "Failed to save Canvas token",
       });
     }
   } catch (error) {
     console.error("Error updating canvas token:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: "Internal server error",
     });
   }
 });
@@ -276,7 +1067,7 @@ app.delete("/api/canvas-token", authenticateToken, async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
@@ -285,20 +1076,166 @@ app.delete("/api/canvas-token", authenticateToken, async (req, res) => {
     if (success) {
       res.json({
         success: true,
-        message: 'Canvas token removed successfully'
+        message: "Canvas token removed successfully",
       });
     } else {
       res.status(500).json({
         success: false,
-        message: 'Failed to remove Canvas token'
+        message: "Failed to remove Canvas token",
       });
     }
   } catch (error) {
     console.error("Error removing canvas token:", error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: "Internal server error",
     });
+  }
+});
+
+// Tasks endpoints
+app.get("/api/tasks", authenticateToken, async (req, res) => {
+  try {
+    const user = await getUserByUsername(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const { startDate, endDate } = req.query;
+    const tasks = await getUserTasks(
+      user.id,
+      startDate as string,
+      endDate as string
+    );
+
+    res.json({
+      tasks: tasks,
+      user: req.user!.userId,
+    });
+  } catch (error) {
+    console.error("Error fetching tasks:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/api/tasks", authenticateToken, async (req, res) => {
+  try {
+    const user = await getUserByUsername(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const { title, description, type, course, due_date, due_time, priority } =
+      req.body;
+
+    if (!title || !due_date || !type || !priority) {
+      return res.status(400).json({
+        message: "Title, due_date, type, and priority are required",
+      });
+    }
+
+    const validTypes = [
+      "assignment",
+      "exam",
+      "project",
+      "meeting",
+      "study",
+      "deadline",
+      "other",
+    ];
+    const validPriorities = ["high", "medium", "low"];
+
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ message: "Invalid task type" });
+    }
+
+    if (!validPriorities.includes(priority)) {
+      return res.status(400).json({ message: "Invalid priority" });
+    }
+
+    const taskId = await createTask({
+      user_id: user.id,
+      title,
+      description: description || undefined,
+      type,
+      course: course || undefined,
+      due_date,
+      due_time: due_time || undefined,
+      priority,
+      completed: false,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Task created successfully",
+      taskId: taskId,
+    });
+  } catch (error) {
+    console.error("Error creating task:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.put("/api/tasks/:id", authenticateToken, async (req, res) => {
+  try {
+    const user = await getUserByUsername(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const taskId = parseInt(req.params.id);
+    if (isNaN(taskId)) {
+      return res.status(400).json({ message: "Invalid task ID" });
+    }
+
+    const updates = req.body;
+    const success = await updateTask(taskId, user.id, updates);
+
+    if (success) {
+      res.json({
+        success: true,
+        message: "Task updated successfully",
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: "Task not found or no changes made",
+      });
+    }
+  } catch (error) {
+    console.error("Error updating task:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.delete("/api/tasks/:id", authenticateToken, async (req, res) => {
+  try {
+    const user = await getUserByUsername(req.user!.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const taskId = parseInt(req.params.id);
+    if (isNaN(taskId)) {
+      return res.status(400).json({ message: "Invalid task ID" });
+    }
+
+    const success = await deleteTask(taskId, user.id);
+
+    if (success) {
+      res.json({
+        success: true,
+        message: "Task deleted successfully",
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+  } catch (error) {
+    console.error("Error deleting task:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
@@ -332,7 +1269,7 @@ app.get("/api/public/announcements", (req, res) => {
 const startServer = async () => {
   try {
     await initializeDatabase();
-    console.log('Database initialized successfully');
+    console.log("Database initialized successfully");
 
     // Migrate existing users from file
     await migrateUsersFromFile();
@@ -349,30 +1286,30 @@ const startServer = async () => {
       );
     });
   } catch (error) {
-    console.error('Failed to initialize database:', error);
+    console.error("Failed to initialize database:", error);
     process.exit(1);
   }
 };
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Shutting down gracefully...');
+process.on("SIGINT", async () => {
+  console.log("Shutting down gracefully...");
   try {
     await closeDatabase();
-    console.log('Database connection closed');
+    console.log("Database connection closed");
   } catch (error) {
-    console.error('Error closing database:', error);
+    console.error("Error closing database:", error);
   }
   process.exit(0);
 });
 
-process.on('SIGTERM', async () => {
-  console.log('Shutting down gracefully...');
+process.on("SIGTERM", async () => {
+  console.log("Shutting down gracefully...");
   try {
     await closeDatabase();
-    console.log('Database connection closed');
+    console.log("Database connection closed");
   } catch (error) {
-    console.error('Error closing database:', error);
+    console.error("Error closing database:", error);
   }
   process.exit(0);
 });

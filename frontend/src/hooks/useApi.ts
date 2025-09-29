@@ -132,3 +132,97 @@ export const useAnalytics = () => {
     staleTime: 1 * 60 * 1000, // 1 minute
   })
 }
+
+// Tasks query
+export const useTasks = (startDate?: string, endDate?: string) => {
+  const token = localStorage.getItem('dashboard_token')
+
+  return useQuery({
+    queryKey: ['tasks', startDate, endDate],
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      if (startDate) params.append('startDate', startDate)
+      if (endDate) params.append('endDate', endDate)
+
+      const url = `${API_BASE}/tasks${params.toString() ? `?${params.toString()}` : ''}`
+
+      const response = await fetch(url, {
+        headers: getAuthHeaders(),
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch tasks')
+      }
+      return response.json()
+    },
+    enabled: !!token, // Only run if token exists
+    staleTime: 30 * 1000, // 30 seconds (tasks update more frequently)
+  })
+}
+
+// Task mutations
+export const createTaskAPI = async (taskData: {
+  title: string
+  description?: string
+  type: string
+  course?: string
+  due_date: string
+  due_time?: string
+  priority: string
+}) => {
+  const response = await fetch(`${API_BASE}/tasks`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(taskData),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Failed to create task')
+  }
+
+  return response.json()
+}
+
+export const updateTaskAPI = async (taskId: number, updates: any) => {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(updates),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Failed to update task')
+  }
+
+  return response.json()
+}
+
+export const deleteTaskAPI = async (taskId: number) => {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Failed to delete task')
+  }
+
+  return response.json()
+}
+
+// Canvas integration
+export const syncCanvasCoursesAPI = async () => {
+  const response = await fetch(`${API_BASE}/sync-canvas-courses`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Failed to sync Canvas courses')
+  }
+
+  return response.json()
+}

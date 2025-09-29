@@ -23,6 +23,8 @@ export default function Login({ onLogin }: LoginProps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Client-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
+          'X-Client-Timezone-Offset': new Date().getTimezoneOffset().toString(),
         },
         body: JSON.stringify({ username, password }),
       });

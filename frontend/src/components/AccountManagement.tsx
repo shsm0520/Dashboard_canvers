@@ -1,20 +1,21 @@
-import { useState, useEffect } from "react";
-import { useProfile, useHealthStatus } from "../hooks/useApi";
+import { useState } from "react";
+import { useProfile, useCourses } from "../hooks/useApi";
 import { useLanguage } from "../contexts/LanguageContext";
-import SettingsDropdown from "./SettingsDropdown";
-import LoadingScreen from "./LoadingScreen";
+import Header from "./Header";
 import "./AccountManagement.css";
 
 interface AccountManagementProps {
   user: { username: string };
-  onBack: () => void;
   onLogout: () => void;
+  currentTab: 'dashboard' | 'assignments' | 'account';
+  onTabChange: (tab: 'dashboard' | 'assignments' | 'account') => void;
 }
 
 export default function AccountManagement({
   user,
-  onBack,
   onLogout,
+  currentTab,
+  onTabChange,
 }: AccountManagementProps) {
   const { t } = useLanguage();
   const [canvasToken, setCanvasToken] = useState("");
@@ -32,30 +33,7 @@ export default function AccountManagement({
     refetch: refetchProfile,
   } = useProfile();
 
-  const {
-    data: healthStatus,
-    isLoading: healthLoading,
-    error: healthError,
-  } = useHealthStatus();
-
-  const handleLogout = async () => {
-    try {
-      const token = localStorage.getItem('dashboard_token');
-      if (token) {
-        await fetch('http://localhost:5000/api/logout', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-      }
-      onLogout();
-    } catch (err) {
-      console.error('Logout error:', err);
-      onLogout();
-    }
-  };
+  const { data: coursesData, isLoading: coursesLoading } = useCourses();
 
   const showMessage = (msg: string, type: "success" | "error") => {
     setMessage(msg);
@@ -65,7 +43,7 @@ export default function AccountManagement({
 
   const handleUpdateToken = async () => {
     if (!canvasToken.trim()) {
-      showMessage(t('token_required'), "error");
+      showMessage(t("token_required"), "error");
       return;
     }
 
@@ -84,7 +62,7 @@ export default function AccountManagement({
       const data = await response.json();
 
       if (data.success) {
-        showMessage(t('token_updated'), "success");
+        showMessage(data.message || t("token_updated"), "success");
         setIsEditing(false);
         setCanvasToken("");
         refetchProfile();
@@ -92,16 +70,14 @@ export default function AccountManagement({
         showMessage(data.message || "Failed to update Canvas token", "error");
       }
     } catch (error) {
-      showMessage(t('network_error'), "error");
+      showMessage(t("network_error"), "error");
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteToken = async () => {
-    if (
-      !confirm(t('remove_token_confirm'))
-    ) {
+    if (!confirm(t("remove_token_confirm"))) {
       return;
     }
 
@@ -119,13 +95,73 @@ export default function AccountManagement({
       const data = await response.json();
 
       if (data.success) {
-        showMessage(t('token_removed'), "success");
+        showMessage(t("token_removed"), "success");
         refetchProfile();
       } else {
         showMessage(data.message || "Failed to remove Canvas token", "error");
       }
     } catch (error) {
-      showMessage(t('network_error'), "error");
+      showMessage(t("network_error"), "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSyncCanvas = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("dashboard_token");
+      const response = await fetch("http://localhost:5000/api/sync-canvas-assignments", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
+          "X-Client-Timezone-Offset": new Date().getTimezoneOffset().toString(),
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showMessage("Canvas assignments synced successfully", "success");
+      } else {
+        showMessage(data.message || "Failed to sync Canvas assignments", "error");
+      }
+    } catch (error) {
+      showMessage(t("network_error"), "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetAndSync = async () => {
+    if (!confirm("This will delete ALL existing tasks and re-sync from Canvas. Are you sure?")) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("dashboard_token");
+      const response = await fetch("http://localhost:5000/api/reset-and-sync-canvas", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
+          "X-Client-Timezone-Offset": new Date().getTimezoneOffset().toString(),
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showMessage(`Reset complete! ${data.courses} courses and ${data.assignments} assignments synced.`, "success");
+      } else {
+        showMessage(data.message || "Failed to reset and sync", "error");
+      }
+    } catch (error) {
+      showMessage(t("network_error"), "error");
     } finally {
       setLoading(false);
     }
@@ -136,7 +172,7 @@ export default function AccountManagement({
       <div className="account-container">
         <div className="account-loading">
           <div className="loading-spinner"></div>
-          <p>{t('loading_account')}</p>
+          <p>{t("loading_account")}</p>
         </div>
       </div>
     );
@@ -147,8 +183,8 @@ export default function AccountManagement({
       <div className="account-container">
         <div className="account-error">
           <p>Failed to load account information</p>
-          <button onClick={onBack} className="back-button">
-            {t('back_to_dashboard')}
+          <button onClick={() => onTabChange('dashboard')} className="back-button">
+            {t("back_to_dashboard")}
           </button>
         </div>
       </div>
@@ -157,61 +193,39 @@ export default function AccountManagement({
 
   return (
     <div className="account-container">
-      <header className="dashboard-header">
-        <div className="header-left">
-          <h1>{t('account_management')}</h1>
-          <div className="health-indicator">
-            <div
-              className={`health-dot ${healthStatus?.healthLevel || 'red'}`}
-              title={healthStatus?.message || t('checking')}
-            ></div>
-            <span className="health-text">
-              {healthLoading ? t('checking') :
-               healthStatus?.healthLevel === 'green' ? t('online') :
-               healthStatus?.healthLevel === 'yellow' ? t('warning') : t('offline')}
-            </span>
-          </div>
-        </div>
-        <div className="user-info">
-          <span>{t('welcome')}, {user.username}!</span>
-          <SettingsDropdown />
-          <button onClick={onBack} className="account-button">
-            ← {t('back_to_dashboard')}
-          </button>
-          <button onClick={handleLogout} className="logout-button">
-            {t('logout')}
-          </button>
-        </div>
-      </header>
+      <Header
+        user={user}
+        onLogout={onLogout}
+        currentTab={currentTab}
+        onTabChange={onTabChange}
+      />
 
       <main className="account-content">
         <div className="account-section">
-          <h2>{t('profile_info')}</h2>
+          <h2>{t("profile_info")}</h2>
           <div className="profile-info">
             <div className="info-item">
-              <label>{t('username')}:</label>
+              <label>{t("username")}:</label>
               <span>{profileData?.profile?.username}</span>
             </div>
             <div className="info-item">
-              <label>{t('email')}:</label>
+              <label>{t("email")}:</label>
               <span>{profileData?.profile?.email}</span>
             </div>
             <div className="info-item">
-              <label>{t('role')}:</label>
+              <label>{t("role")}:</label>
               <span className="role-badge">{profileData?.profile?.role}</span>
             </div>
             <div className="info-item">
-              <label>{t('join_date')}:</label>
+              <label>{t("join_date")}:</label>
               <span>{profileData?.profile?.joinDate}</span>
             </div>
           </div>
         </div>
 
         <div className="account-section">
-          <h2>{t('canvas_integration')}</h2>
-          <p className="section-description">
-            {t('canvas_desc')}
-          </p>
+          <h2>{t("canvas_integration")}</h2>
+          <p className="section-description">{t("canvas_desc")}</p>
 
           {message && <div className={`message ${messageType}`}>{message}</div>}
 
@@ -227,8 +241,8 @@ export default function AccountManagement({
                 <div className="status-dot"></div>
                 <span>
                   {profileData?.profile?.hasCanvasToken
-                    ? t('connected')
-                    : t('not_connected')}
+                    ? t("connected")
+                    : t("not_connected")}
                 </span>
               </div>
               {profileData?.profile?.hasCanvasToken && (
@@ -241,7 +255,7 @@ export default function AccountManagement({
             {isEditing ? (
               <div className="token-editor">
                 <div className="form-group">
-                  <label htmlFor="canvas-token">{t('canvas_token')}:</label>
+                  <label htmlFor="canvas-token">{t("canvas_token")}:</label>
                   <input
                     id="canvas-token"
                     type="password"
@@ -262,7 +276,7 @@ export default function AccountManagement({
                     className="save-button"
                     disabled={loading || !canvasToken.trim()}
                   >
-                    {loading ? t('saving') : t('save_token')}
+                    {loading ? t("saving") : t("save_token")}
                   </button>
                   <button
                     onClick={() => {
@@ -272,7 +286,7 @@ export default function AccountManagement({
                     className="cancel-button"
                     disabled={loading}
                   >
-                    {t('cancel')}
+                    {t("cancel")}
                   </button>
                 </div>
               </div>
@@ -284,35 +298,89 @@ export default function AccountManagement({
                   disabled={loading}
                 >
                   {profileData?.profile?.hasCanvasToken
-                    ? t('update_token')
-                    : t('add_token')}
+                    ? t("update_token")
+                    : t("add_token")}
                 </button>
                 {profileData?.profile?.hasCanvasToken && (
-                  <button
-                    onClick={handleDeleteToken}
-                    className="delete-button"
-                    disabled={loading}
-                  >
-                    {loading ? t('removing') : t('remove_token')}
-                  </button>
+                  <>
+                    <button
+                      onClick={handleSyncCanvas}
+                      className="sync-button"
+                      disabled={loading}
+                    >
+                      {loading ? "Syncing..." : "🔄 Sync Canvas"}
+                    </button>
+                    <button
+                      onClick={handleResetAndSync}
+                      className="reset-button"
+                      disabled={loading}
+                    >
+                      {loading ? "Resetting..." : "🔄 Reset & Re-sync All"}
+                    </button>
+                    <button
+                      onClick={handleDeleteToken}
+                      className="delete-button"
+                      disabled={loading}
+                    >
+                      {loading ? t("removing") : t("remove_token")}
+                    </button>
+                  </>
                 )}
               </div>
             )}
           </div>
 
           <div className="canvas-help">
-            <h3>{t('canvas_help_title')}</h3>
+            <h3>{t("canvas_help_title")}</h3>
             <ol>
-              <li>{t('canvas_help_1')}</li>
-              <li>{t('canvas_help_2')}</li>
-              <li>{t('canvas_help_3')}</li>
-              <li>{t('canvas_help_4')}</li>
-              <li>{t('canvas_help_5')}</li>
-              <li>{t('canvas_help_6')}</li>
+              <li>{t("canvas_help_1")}</li>
+              <li>{t("canvas_help_2")}</li>
+              <li>{t("canvas_help_3")}</li>
+              <li>{t("canvas_help_4")}</li>
+              <li>{t("canvas_help_5")}</li>
+              <li>{t("canvas_help_6")}</li>
             </ol>
             <p className="security-note">
-              <strong>Security:</strong> {t('security_note')}
+              <strong>Security:</strong> {t("security_note")}
             </p>
+          </div>
+        </div>
+
+        {/* Courses Section */}
+        <div className="account-section">
+          <h2>{t("Synced_section_title")}</h2>
+          <p className="section-description">{t("Synced_section_desc")}</p>
+
+          <div className="courses-list">
+            {coursesLoading ? (
+              <div className="loading">Loading courses...</div>
+            ) : coursesData?.courses?.length > 0 ? (
+              <div className="courses-grid">
+                {coursesData.courses.map((course: any) => (
+                  <div key={course.id} className="course-item">
+                    <h4>{course.name}</h4>
+                    {course.professor && course.professor !== "N/A" && (
+                      <p className="course-code">
+                        Course Code: {course.professor}
+                      </p>
+                    )}
+                    {course.canvas_course_id && (
+                      <div className="canvas-sync-badge">
+                        <span>🎯</span> {t("Synced_from_Canvas")}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="no-courses-account">
+                <p>No courses found.</p>
+                <p>
+                  Add your Canvas API token above to sync your courses
+                  automatically.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </main>

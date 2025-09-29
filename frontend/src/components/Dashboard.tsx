@@ -1,128 +1,185 @@
-import { useState, useEffect } from 'react';
-import { useHealthStatus, useCourses } from '../hooks/useApi';
-import { useLanguage } from '../contexts/LanguageContext';
-import LoadingScreen from './LoadingScreen';
-import SettingsDropdown from './SettingsDropdown';
-import './Dashboard.css';
+import React from "react";
+import { useCourses, useTasks } from "../hooks/useApi";
+import { useCourseColors } from "../hooks/useCourseColors";
+import { useLanguage } from "../contexts/LanguageContext";
+import { formatDateLocal } from "../utils/dateUtils";
+import Header from "./Header";
+import WeeklyCalendar from "./WeeklyCalendar";
+import "./Dashboard.css";
 
 interface DashboardProps {
   user: { username: string };
   onLogout: () => void;
-  onNavigateToAccount: () => void;
+  currentTab: "dashboard" | "assignments" | "account";
+  onTabChange: (tab: "dashboard" | "assignments" | "account") => void;
 }
 
-export default function Dashboard({ user, onLogout, onNavigateToAccount }: DashboardProps) {
+export default function Dashboard({
+  user,
+  onLogout,
+  currentTab,
+  onTabChange,
+}: DashboardProps) {
   const { t } = useLanguage();
-
-  const {
-    data: healthStatus,
-    isLoading: healthLoading,
-    error: healthError,
-    refetch: refetchHealth
-  } = useHealthStatus();
+  const { getCourseColor } = useCourseColors();
 
   const {
     data: coursesData,
     isLoading: coursesLoading,
-    error: coursesError
+    error: coursesError,
   } = useCourses();
 
-  const handleLogout = async () => {
-    try {
-      const token = localStorage.getItem('dashboard_token');
-      if (token) {
-        await fetch('http://localhost:5000/api/logout', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-      }
-      onLogout();
-    } catch (err) {
-      console.error('Logout error:', err);
-      onLogout();
-    }
-  };
+  // Get upcoming tasks (next 7 days)
+  const today = new Date();
+  const nextWeek = new Date(today);
+  nextWeek.setDate(today.getDate() + 7);
+
+  // Get tasks from 1 week ago to 1 week from now
+  const oneWeekAgo = new Date(today);
+  oneWeekAgo.setDate(today.getDate() - 7);
+
+  const { data: tasksData, isLoading: tasksLoading } = useTasks(
+    formatDateLocal(oneWeekAgo),
+    formatDateLocal(nextWeek)
+  );
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header">
-        <div className="header-left">
-          <h1>{t('dashboard')}</h1>
-          <div className="health-indicator">
-            <div
-              className={`health-dot ${healthStatus?.healthLevel || 'red'}`}
-              title={healthStatus?.message || t('checking')}
-            ></div>
-            <span className="health-text">
-              {healthLoading ? t('checking') :
-               healthStatus?.healthLevel === 'green' ? t('online') :
-               healthStatus?.healthLevel === 'yellow' ? t('warning') : t('offline')}
-            </span>
-          </div>
-        </div>
-        <div className="user-info">
-          <span>{t('welcome')}, {user.username}!</span>
-          <SettingsDropdown />
-          <button onClick={onNavigateToAccount} className="account-button">
-            {t('account')}
-          </button>
-          <button onClick={handleLogout} className="logout-button">
-            {t('logout')}
-          </button>
-        </div>
-      </header>
+      <Header
+        user={user}
+        onLogout={onLogout}
+        currentTab={currentTab}
+        onTabChange={onTabChange}
+      />
 
       <main className="dashboard-content">
-
         <div className="courses-section">
-          <h2>{t('your_courses')}</h2>
+          <h2>{t("your_courses")}</h2>
           <div className="courses-grid">
             {coursesLoading ? (
-              <div className="loading">{t('loading_courses')}</div>
+              <div className="loading">{t("loading_courses")}</div>
             ) : coursesError ? (
               <div className="error">
                 <p>Failed to load courses: {coursesError.message}</p>
               </div>
             ) : coursesData?.courses?.length > 0 ? (
               coursesData.courses.map((course: any) => (
-                <div key={course.id} className="course-card">
+                <div
+                  key={course.id}
+                  className="course-card"
+                  style={{
+                    borderLeftColor: getCourseColor(course.name),
+                  }}
+                >
                   <h3>{course.name}</h3>
-                  <p><strong>{t('professor')}:</strong> {course.professor}</p>
-                  <p><strong>{t('credits')}:</strong> {course.credits}</p>
-                  <button className="course-button">{t('view_details')}</button>
+                  {course.professor && course.professor !== "N/A" && (
+                    <p>
+                      <strong>Course Code:</strong> {course.professor}
+                    </p>
+                  )}
+                  {course.credits && (
+                    <p>
+                      <strong>{t("credits")}:</strong> {course.credits}
+                    </p>
+                  )}
                 </div>
               ))
             ) : (
               <div className="no-courses">
-                <p>{t('no_courses')}</p>
+                <p>{t("no_courses")}</p>
+                <p>
+                  Add your Canvas API token in Account settings. Courses will
+                  sync automatically when you log in.
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="features-section">
-          <h2>{t('available_features')}</h2>
+        {/* <div className="assignments-preview">
+          <div className="section-header">
+            <h2>{t("upcoming_assignments") || "다가오는 과제"}</h2>
+            <button
+              className="view-all-button"
+              onClick={() => onTabChange('assignments')}
+            >
+              {t("view_all") || "전체 보기"} →
+            </button>
+          </div>
+
+          {tasksLoading ? (
+            <div className="loading">{t("loading") || "로딩 중..."}</div>
+          ) : tasksData?.tasks?.length > 0 ? (
+            <div className="assignments-preview-list">
+              {tasksData.tasks
+                .filter((task: any) => !task.completed)
+                .slice(0, 3)
+                .map((task: any) => (
+                  <div
+                    key={task.id}
+                    className="assignment-preview-card"
+                    style={{
+                      borderLeftColor: task.course ? getCourseColor(task.course) : '#6b7280'
+                    }}
+                  >
+                    <h4>{task.title}</h4>
+                    {task.course && (
+                      <div
+                        className="assignment-course"
+                        style={{
+                          backgroundColor: getCourseColor(task.course),
+                          color: 'white'
+                        }}
+                      >
+                        {task.course}
+                      </div>
+                    )}
+                    <div className="assignment-due">
+                      📅 {new Date(task.due_date).toLocaleDateString()}
+                      {task.due_time && ` ${task.due_time}`}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="no-assignments">
+              <p>{t("no_assignments") || "과제가 없습니다"}</p>
+            </div>
+          )}
+        </div> */}
+
+        <div className="calendar-section">
+          <WeeklyCalendar
+            onDateSelect={(date) => console.log("Selected date:", date)}
+          />
+        </div>
+
+        {/* <div className="features-section">
+          <h2>{t("available_features")}</h2>
           <div className="features-grid">
             <div className="feature-card">
-              <h3>{t('performance_analytics')}</h3>
-              <p>{t('performance_analytics_desc')}</p>
-              <button className="feature-button" disabled>{t('coming_soon')}</button>
+              <h3>{t("performance_analytics")}</h3>
+              <p>{t("performance_analytics_desc")}</p>
+              <button className="feature-button" disabled>
+                {t("coming_soon")}
+              </button>
             </div>
             <div className="feature-card">
-              <h3>{t('task_scheduler')}</h3>
-              <p>{t('task_scheduler_desc')}</p>
-              <button className="feature-button" disabled>{t('coming_soon')}</button>
+              <h3>{t("task_scheduler")}</h3>
+              <p>{t("task_scheduler_desc")}</p>
+              <button className="feature-button" disabled>
+                {t("coming_soon")}
+              </button>
             </div>
             <div className="feature-card">
-              <h3>{t('grade_tracker')}</h3>
-              <p>{t('grade_tracker_desc')}</p>
-              <button className="feature-button" disabled>{t('coming_soon')}</button>
+              <h3>{t("grade_tracker")}</h3>
+              <p>{t("grade_tracker_desc")}</p>
+              <button className="feature-button" disabled>
+                {t("coming_soon")}
+              </button>
             </div>
           </div>
-        </div>
+        </div> */}
       </main>
     </div>
   );
