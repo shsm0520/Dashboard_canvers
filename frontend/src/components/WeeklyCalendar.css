@@ -97,7 +97,7 @@
   transition: all 0.2s ease;
   background: rgba(255, 255, 255, 0.3);
   border: 1px solid transparent;
-  min-height: 100px;
+  /* min-height: 100px; */
   overflow: hidden;
 }
 
@@ -168,8 +168,12 @@
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Current week styling */
@@ -443,7 +447,7 @@
 
   .day-cell {
     padding: 0.4rem 0.25rem;
-    min-height: 80px;
+    /* min-height: 80px; */
   }
 
   .task-item {
@@ -518,7 +522,7 @@
 
   .day-cell {
     padding: 0.4rem 0.2rem;
-    min-height: 75px;
+    /* min-height: 75px; */
   }
 
   .task-item {
@@ -551,7 +555,7 @@
 
   .day-cell {
     padding: 0.375rem 0.125rem;
-    min-height: 40px;
+    /* min-height: 40px; */
   }
 
   .day-name {
@@ -583,7 +587,7 @@
 
   .day-cell {
     padding: 1rem 0.75rem;
-    min-height: 70px;
+    /* min-height: 70px; */
   }
 
   .day-name {
@@ -607,9 +611,9 @@
     padding: 1.5rem;
   }
 
-  .day-cell {
+  /* .day-cell {
     min-height: 140px;
-  }
+  } */
 
   .task-item {
     font-size: 0.7rem;

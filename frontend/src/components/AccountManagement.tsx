@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useProfile, useCourses } from "../hooks/useApi";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useQueryClient } from "@tanstack/react-query";
 import Header from "./Header";
 import "./AccountManagement.css";
 
@@ -18,6 +19,7 @@ export default function AccountManagement({
   onTabChange,
 }: AccountManagementProps) {
   const { t } = useLanguage();
+  const queryClient = useQueryClient();
   const [canvasToken, setCanvasToken] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -124,7 +126,10 @@ export default function AccountManagement({
       const data = await response.json();
 
       if (data.success) {
-        showMessage("Canvas assignments synced successfully", "success");
+        // Invalidate all relevant queries to refresh data
+        await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        await queryClient.invalidateQueries({ queryKey: ['courses'] });
+        showMessage(`Canvas synced: ${data.assignmentCount} assignments, ${data.moduleItemCount || 0} module items`, "success");
       } else {
         showMessage(data.message || "Failed to sync Canvas assignments", "error");
       }
@@ -156,7 +161,10 @@ export default function AccountManagement({
       const data = await response.json();
 
       if (data.success) {
-        showMessage(`Reset complete! ${data.courses} courses and ${data.assignments} assignments synced.`, "success");
+        // Invalidate all relevant queries to refresh data
+        await queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        await queryClient.invalidateQueries({ queryKey: ['courses'] });
+        showMessage(`Reset complete! ${data.courses} courses, ${data.assignments} assignments, ${data.moduleItems || 0} module items synced.`, "success");
       } else {
         showMessage(data.message || "Failed to reset and sync", "error");
       }

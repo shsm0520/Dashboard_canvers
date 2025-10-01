@@ -67,6 +67,21 @@ export const initializeDatabase = (): Promise<void> => {
         )
       `);
 
+      // Sync logs table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS sync_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
+          last_sync_at DATETIME NOT NULL,
+          sync_type TEXT NOT NULL,
+          status TEXT NOT NULL,
+          assignments_count INTEGER DEFAULT 0,
+          modules_count INTEGER DEFAULT 0,
+          error_message TEXT,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      `);
+
       // Health status logs table
       db.run(`
         CREATE TABLE IF NOT EXISTS health_logs (

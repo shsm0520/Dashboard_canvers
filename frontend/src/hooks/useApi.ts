@@ -89,7 +89,10 @@ export const useCourses = () => {
       return response.json()
     },
     enabled: !!token, // Only run if token exists
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes - courses don't change often
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
+    refetchInterval: 60 * 60 * 1000, // Auto-refetch every 1 hour
+    refetchIntervalInBackground: false, // Don't refetch when tab is not visible
   })
 }
 
@@ -155,7 +158,10 @@ export const useTasks = (startDate?: string, endDate?: string) => {
       return response.json()
     },
     enabled: !!token, // Only run if token exists
-    staleTime: 30 * 1000, // 30 seconds (tasks update more frequently)
+    staleTime: 5 * 60 * 1000, // 5 minutes - data becomes stale after 5 minutes
+    refetchOnWindowFocus: true, // Refetch when user returns to tab
+    refetchInterval: 60 * 60 * 1000, // Auto-refetch every 1 hour
+    refetchIntervalInBackground: false, // Don't refetch when tab is not visible
   })
 }
 

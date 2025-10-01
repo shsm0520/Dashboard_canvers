@@ -48,13 +48,49 @@ export default function WeeklyCalendar({
   const { t, language } = useLanguage(); // language 코드("ko" | "en")
   const { getCourseColor } = useCourseColors();
   const queryClient = useQueryClient();
-  const [currentDate] = useState(new Date());
+
+  // Update current date when window gains focus or at midnight
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [weeks, setWeeks] = useState<WeekInfo[]>([]);
   const [selectedTask, setSelectedTask] = useState<{
     task: Task;
     date: Date;
   } | null>(null);
+
+  useEffect(() => {
+    // Update date when window gains focus
+    const handleFocus = () => {
+      setCurrentDate(new Date());
+      console.log('📅 Date updated on focus:', new Date().toDateString());
+    };
+
+    // Update date at midnight
+    const updateDateAtMidnight = () => {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+
+      const timeUntilMidnight = tomorrow.getTime() - now.getTime();
+
+      const timer = setTimeout(() => {
+        setCurrentDate(new Date());
+        console.log('🌙 Date updated at midnight:', new Date().toDateString());
+        updateDateAtMidnight(); // Schedule next midnight update
+      }, timeUntilMidnight);
+
+      return timer;
+    };
+
+    window.addEventListener('focus', handleFocus);
+    const midnightTimer = updateDateAtMidnight();
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearTimeout(midnightTimer);
+    };
+  }, []);
 
   // 주차 계산
   const getWeekNumber = (date: Date): number => {
