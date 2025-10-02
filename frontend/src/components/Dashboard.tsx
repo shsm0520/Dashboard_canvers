@@ -2,7 +2,7 @@ import React from "react";
 import { useCourses, useTasks } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useLanguage } from "../contexts/LanguageContext";
-import { formatDateLocal } from "../utils/dateUtils";
+import { formatDateLocal, formatDateShort } from "../utils/dateUtils";
 import Header from "./Header";
 import WeeklyCalendar from "./WeeklyCalendar";
 import "./Dashboard.css";
@@ -20,7 +20,7 @@ export default function Dashboard({
   currentTab,
   onTabChange,
 }: DashboardProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { getCourseColor } = useCourseColors();
   const [selectedCourse, setSelectedCourse] = React.useState<string | null>(null);
 
@@ -137,7 +137,7 @@ export default function Dashboard({
                       </div>
                     )}
                     <div className="assignment-due">
-                      📅 {new Date(task.due_date).toLocaleDateString()}
+                      📅 {formatDateShort(new Date(task.due_date), language)}
                       {task.due_time && ` ${task.due_time}`}
                     </div>
                   </div>

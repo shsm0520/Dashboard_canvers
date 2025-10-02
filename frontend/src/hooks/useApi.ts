@@ -1,16 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
-
-// Helper function to get auth headers
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('dashboard_token')
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-  }
-}
+import { getAuthHeaders, getToken } from '../utils/authUtils'
 
 // API base URL
 const API_BASE = 'http://localhost:5000/api'
+
+// Common query options
+export const QUERY_DEFAULTS = {
+  staleTime: 5 * 60 * 1000, // 5 minutes
+  refetchOnWindowFocus: true,
+  retry: 1,
+}
+
+export const QUERY_LONG_CACHE = {
+  staleTime: 10 * 60 * 1000, // 10 minutes
+  refetchOnWindowFocus: true,
+  refetchInterval: 60 * 60 * 1000, // 1 hour
+  refetchIntervalInBackground: false,
+  retry: 1,
+}
+
+export const QUERY_SHORT_CACHE = {
+  staleTime: 1 * 60 * 1000, // 1 minute
+  refetchOnWindowFocus: true,
+  retry: 1,
+}
 
 // Health status query
 export const useHealthStatus = () => {
@@ -31,10 +44,9 @@ export const useHealthStatus = () => {
         const data = await response.json()
 
         // Add authentication status and health level
-        const token = localStorage.getItem('dashboard_token')
         return {
           ...data,
-          authenticated: !!token,
+          authenticated: !!getToken(),
           healthLevel: data.status === 'healthy' ? 'green' : 'yellow'
         }
       } catch (error) {
@@ -55,8 +67,6 @@ export const useHealthStatus = () => {
 
 // User info query
 export const useUserInfo = () => {
-  const token = localStorage.getItem('dashboard_token')
-
   return useQuery({
     queryKey: ['user'],
     queryFn: async () => {
@@ -68,15 +78,13 @@ export const useUserInfo = () => {
       }
       return response.json()
     },
-    enabled: !!token, // Only run if token exists
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!getToken(),
+    ...QUERY_DEFAULTS,
   })
 }
 
 // Courses query
 export const useCourses = () => {
-  const token = localStorage.getItem('dashboard_token')
-
   return useQuery({
     queryKey: ['courses'],
     queryFn: async () => {
@@ -88,18 +96,13 @@ export const useCourses = () => {
       }
       return response.json()
     },
-    enabled: !!token, // Only run if token exists
-    staleTime: 10 * 60 * 1000, // 10 minutes - courses don't change often
-    refetchOnWindowFocus: true, // Refetch when user returns to tab
-    refetchInterval: 60 * 60 * 1000, // Auto-refetch every 1 hour
-    refetchIntervalInBackground: false, // Don't refetch when tab is not visible
+    enabled: !!getToken(),
+    ...QUERY_LONG_CACHE,
   })
 }
 
 // Profile query
 export const useProfile = () => {
-  const token = localStorage.getItem('dashboard_token')
-
   return useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
@@ -111,15 +114,13 @@ export const useProfile = () => {
       }
       return response.json()
     },
-    enabled: !!token, // Only run if token exists
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!getToken(),
+    ...QUERY_DEFAULTS,
   })
 }
 
 // Analytics query
 export const useAnalytics = () => {
-  const token = localStorage.getItem('dashboard_token')
-
   return useQuery({
     queryKey: ['analytics'],
     queryFn: async () => {
@@ -131,15 +132,13 @@ export const useAnalytics = () => {
       }
       return response.json()
     },
-    enabled: !!token, // Only run if token exists
-    staleTime: 1 * 60 * 1000, // 1 minute
+    enabled: !!getToken(),
+    ...QUERY_SHORT_CACHE,
   })
 }
 
 // Tasks query
 export const useTasks = (startDate?: string, endDate?: string) => {
-  const token = localStorage.getItem('dashboard_token')
-
   return useQuery({
     queryKey: ['tasks', startDate, endDate],
     queryFn: async () => {
@@ -157,11 +156,8 @@ export const useTasks = (startDate?: string, endDate?: string) => {
       }
       return response.json()
     },
-    enabled: !!token, // Only run if token exists
-    staleTime: 5 * 60 * 1000, // 5 minutes - data becomes stale after 5 minutes
-    refetchOnWindowFocus: true, // Refetch when user returns to tab
-    refetchInterval: 60 * 60 * 1000, // Auto-refetch every 1 hour
-    refetchIntervalInBackground: false, // Don't refetch when tab is not visible
+    enabled: !!getToken(),
+    ...QUERY_LONG_CACHE,
   })
 }
 

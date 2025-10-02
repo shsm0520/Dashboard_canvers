@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getToken, setToken, removeToken } from "./utils/authUtils";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import Assignments from "./components/Assignments";
@@ -28,7 +29,7 @@ function App() {
 
         // Stage 2: Check authentication
         setLoadingStage("authenticating");
-        const token = localStorage.getItem("dashboard_token");
+        const token = getToken();
         const savedUser = localStorage.getItem("dashboard_user");
 
         if (token && savedUser) {
@@ -48,7 +49,7 @@ function App() {
 
             if (!response.ok) {
               // If token is invalid, clear storage
-              localStorage.removeItem("dashboard_token");
+              removeToken();
               localStorage.removeItem("dashboard_user");
               setUser(null);
               setLoadingStage("complete");
@@ -90,14 +91,14 @@ function App() {
   const handleLogin = (userData: User, token: string) => {
     setUser(userData);
     localStorage.setItem("dashboard_user", JSON.stringify(userData));
-    localStorage.setItem("dashboard_token", token);
+    setToken(token);
   };
 
   const handleLogout = () => {
     setUser(null);
     setCurrentTab("dashboard");
     localStorage.removeItem("dashboard_user");
-    localStorage.removeItem("dashboard_token");
+    removeToken();
   };
 
   if (loading) {

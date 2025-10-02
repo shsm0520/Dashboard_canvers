@@ -3,7 +3,7 @@ import { useLanguage } from "../contexts/LanguageContext";
 import { useTasks, updateTaskAPI } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useQueryClient } from "@tanstack/react-query";
-import { formatDateLocal } from "../utils/dateUtils";
+import { formatDateLocal, formatDateShort, formatMonthDay, formatWeekRange } from "../utils/dateUtils";
 import { stripHtmlTags, truncateText } from "../utils/textUtils";
 import "./WeeklyCalendar.css";
 
@@ -245,29 +245,23 @@ export default function WeeklyCalendar({
   const isSelected = (date: Date): boolean =>
     selectedDate ? date.toDateString() === selectedDate.toDateString() : false;
 
-  const formatDate = (date?: Date): string => {
+  const formatDateWithLocale = (date?: Date): string => {
     if (!date) return "";
-    return date.toLocaleDateString(language === "ko" ? "ko-KR" : "en-US", {
-      month: "short",
-      day: "numeric",
-    });
+    const locale = language === "ko" ? "ko-KR" : "en-US";
+    return formatDateShort(date, locale);
   };
 
-  const formatWeekRange = (start?: Date, end?: Date): string => {
+  const formatWeekRangeWithLocale = (start?: Date, end?: Date): string => {
     if (!start || !end) return "";
     const locale = language === "ko" ? "ko-KR" : "en-US";
-    const startMonth = start.getMonth();
-    const endMonth = end.getMonth();
-    const formatMonthDay = (d: Date) =>
-      d.toLocaleDateString(locale, { month: "short", day: "numeric" });
 
-    if (startMonth === endMonth) {
+    if (start.getMonth() === end.getMonth()) {
       const monthStr = start.toLocaleDateString(locale, { month: "short" });
       return language === "ko"
         ? `${monthStr} ${start.getDate()}–${end.getDate()}일`
         : `${monthStr} ${start.getDate()}–${end.getDate()}`;
     }
-    return `${formatMonthDay(start)} – ${formatMonthDay(end)}`;
+    return `${formatMonthDay(start, locale)} – ${formatMonthDay(end, locale)}`;
   };
 
   const dayNames = [
@@ -302,7 +296,7 @@ export default function WeeklyCalendar({
         <h2>{t("weekly_schedule") || "주간 일정"}</h2>
         <p className="calendar-subtitle">
           {weeks[0]?.startDate && weeks[3]?.endDate
-            ? formatWeekRange(weeks[0].startDate, weeks[3].endDate)
+            ? formatWeekRangeWithLocale(weeks[0].startDate, weeks[3].endDate)
             : "Loading..."}
         </p>
       </div>
@@ -320,7 +314,7 @@ export default function WeeklyCalendar({
                   {t("week") || "Week"} {week.weekNumber}
                 </span>
                 <span className="week-range">
-                  {formatWeekRange(week.startDate, week.endDate)}
+                  {formatWeekRangeWithLocale(week.startDate, week.endDate)}
                 </span>
                 {isCurrentWeek && (
                   <span className="current-week-badge">

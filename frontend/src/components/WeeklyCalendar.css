@@ -1,7 +1,7 @@
 .weekly-calendar {
   background: var(--background-primary);
   border-radius: 16px;
-  padding: 1.5rem;
+  padding: 1.0rem;
   box-shadow: 0 4px 20px var(--shadow-light);
   border: 1px solid var(--border-color);
   backdrop-filter: blur(10px);
@@ -35,14 +35,14 @@
 .week-section {
   background: rgba(255, 255, 255, 0.7);
   border-radius: 8px;
-  padding: 0.75rem;
+  padding: 0.5rem;
   border: 1px solid rgba(0, 0, 0, 0.08);
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 1rem;
-  align-items: start;
+  grid-template-columns: 90px 1fr;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .week-section:hover {
@@ -54,11 +54,11 @@
 .week-header {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
+  gap: 0.3rem;
+  /* padding: 0.75rem; */
   background: rgba(99, 102, 241, 0.05);
   border-radius: 6px;
-  border: 1px solid rgba(99, 102, 241, 0.1);
+  /* border: 1px solid rgba(99, 102, 241, 0.1); */
 }
 
 .week-number {
@@ -508,7 +508,7 @@
   }
 
   .week-section {
-    padding: 0.5rem;
+    /* padding: 0.5rem; */
     grid-template-columns: 160px 1fr;
     gap: 0.75rem;
   }
@@ -560,7 +560,7 @@
   }
 
   .week-section {
-    padding: 0.5rem;
+    /* padding: 0.5rem; */
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -642,16 +642,16 @@
 /* Desktop enhancements */
 @media (min-width: 769px) {
   .weekly-calendar {
-    padding: 2rem;
+    padding: 1rem;
   }
 
   .weeks-container {
     gap: 1.25rem;
   }
 
-  .week-section {
-    padding: 1.25rem;
-  }
+  /* .week-section {
+    /* padding: 1.25rem; */
+  } */
 
   .days-grid {
     gap: 0.75rem;
@@ -679,9 +679,9 @@
     gap: 1.5rem;
   }
 
-  .week-section {
+  /* .week-section {
     padding: 1.5rem;
-  }
+  } */
 
   /* .day-cell {
     min-height: 140px;

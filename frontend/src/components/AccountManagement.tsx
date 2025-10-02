@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useProfile, useCourses } from "../hooks/useApi";
+import { getToken } from "../utils/authUtils";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useQueryClient } from "@tanstack/react-query";
 import Header from "./Header";
@@ -51,7 +52,7 @@ export default function AccountManagement({
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("dashboard_token");
+      const token = getToken();
       const response = await fetch("http://localhost:5000/api/canvas-token", {
         method: "PUT",
         headers: {
@@ -85,7 +86,7 @@ export default function AccountManagement({
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("dashboard_token");
+      const token = getToken();
       const response = await fetch("http://localhost:5000/api/canvas-token", {
         method: "DELETE",
         headers: {
@@ -112,7 +113,7 @@ export default function AccountManagement({
   const handleSyncCanvas = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("dashboard_token");
+      const token = getToken();
       const response = await fetch("http://localhost:5000/api/sync-canvas-assignments", {
         method: "POST",
         headers: {
@@ -147,7 +148,7 @@ export default function AccountManagement({
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("dashboard_token");
+      const token = getToken();
       const response = await fetch("http://localhost:5000/api/reset-and-sync-canvas", {
         method: "POST",
         headers: {

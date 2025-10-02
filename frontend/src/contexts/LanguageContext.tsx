@@ -21,6 +21,7 @@ const translations = {
     welcome: "Welcome",
     account: "Account",
     logout: "Logout",
+    assignments: "Assignments",
 
     // Loading
     loading: "Loading...",
@@ -120,6 +121,35 @@ const translations = {
     login_failed: "Login failed",
     invalid_credentials: "Invalid username or password",
 
+    // Assignments Page
+    overdue: "Overdue",
+    pending: "Pending",
+    completed: "Completed",
+    overdue_assignments: "Overdue Assignments",
+    upcoming_assignments: "Upcoming Assignments",
+    no_upcoming_assignments: "No upcoming assignments",
+    completed_assignments: "Completed Assignments",
+    no_completed_assignments: "No completed assignments",
+    no_assignments: "No assignments",
+    view_all: "View All",
+    today: "Today",
+    tomorrow: "Tomorrow",
+    yesterday: "Yesterday",
+
+    // Weekly Calendar
+    week: "Week",
+    current: "Current",
+    type: "Type",
+    priority: "Priority",
+    course: "Course",
+    time: "Time",
+    date: "Date",
+    status: "Status",
+    description: "Description",
+    mark_pending: "Mark as Pending",
+    mark_completed: "Mark as Completed",
+    close: "Close",
+
     // Settings
     theme: "Theme",
     light_mode: "Light Mode",
@@ -134,6 +164,7 @@ const translations = {
     welcome: "환영합니다",
     account: "계정",
     logout: "로그아웃",
+    assignments: "과제",
 
     // Loading
     loading: "로딩 중...",
@@ -232,6 +263,35 @@ const translations = {
     demo_credentials: "데모 계정:",
     login_failed: "로그인 실패",
     invalid_credentials: "잘못된 사용자명 또는 비밀번호",
+
+    // Assignments Page
+    overdue: "마감 지남",
+    pending: "진행 중",
+    completed: "완료됨",
+    overdue_assignments: "마감 지난 과제",
+    upcoming_assignments: "다가오는 과제",
+    no_upcoming_assignments: "다가오는 과제가 없습니다",
+    completed_assignments: "완료된 과제",
+    no_completed_assignments: "완료된 과제가 없습니다",
+    no_assignments: "과제가 없습니다",
+    view_all: "전체 보기",
+    today: "오늘",
+    tomorrow: "내일",
+    yesterday: "어제",
+
+    // Weekly Calendar
+    week: "주차",
+    current: "현재",
+    type: "유형",
+    priority: "우선순위",
+    course: "과목",
+    time: "시간",
+    date: "날짜",
+    status: "상태",
+    description: "설명",
+    mark_pending: "진행 중으로 표시",
+    mark_completed: "완료로 표시",
+    close: "닫기",
 
     // Settings
     theme: "테마",
