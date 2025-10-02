@@ -4,6 +4,7 @@ import { useTasks, updateTaskAPI } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDateLocal } from "../utils/dateUtils";
+import { stripHtmlTags, truncateText } from "../utils/textUtils";
 import "./WeeklyCalendar.css";
 
 interface Task {
@@ -28,6 +29,7 @@ interface Task {
 interface WeeklyCalendarProps {
   onDateSelect?: (date: Date) => void;
   onTaskClick?: (task: Task, date: Date) => void;
+  selectedCourse?: string | null;
 }
 
 interface WeekInfo {
@@ -44,6 +46,7 @@ interface DayTasks {
 export default function WeeklyCalendar({
   onDateSelect,
   onTaskClick,
+  selectedCourse,
 }: WeeklyCalendarProps) {
   const { t, language } = useLanguage(); // language 코드("ko" | "en")
   const { getCourseColor } = useCourseColors();
@@ -214,6 +217,19 @@ export default function WeeklyCalendar({
     return colors[type];
   };
 
+  const getTaskTypeIcon = (type: Task["type"]): string => {
+    const icons = {
+      assignment: "📝",
+      exam: "📋",
+      project: "🎯",
+      meeting: "👥",
+      study: "📚",
+      deadline: "⏰",
+      other: "📌",
+    };
+    return icons[type];
+  };
+
   const getPriorityColor = (priority: Task["priority"]): string => {
     const colors = {
       high: "#ef4444",
@@ -331,32 +347,38 @@ export default function WeeklyCalendar({
 
                       {dayTasks.length > 0 && (
                         <div className="day-tasks">
-                          {dayTasks.slice(0, 5).map((task) => (
-                            <div
-                              key={task.id}
-                              className={`task-item ${
-                                task.completed ? "completed" : ""
-                              }`}
-                              style={{
-                                backgroundColor: task.course ? getCourseColor(task.course) : getTaskTypeColor(task.type),
-                                borderLeft: `3px solid ${getPriorityColor(
+                          {dayTasks.slice(0, 5).map((task) => {
+                            const isHighlighted = !selectedCourse || task.course === selectedCourse;
+                            return (
+                              <div
+                                key={task.id}
+                                className={`task-item ${
+                                  task.completed ? "completed" : ""
+                                } ${isHighlighted ? "highlighted" : "dimmed"}`}
+                                style={{
+                                  backgroundColor: task.course ? getCourseColor(task.course) : getTaskTypeColor(task.type),
+                                  borderLeft: `3px solid ${getPriorityColor(
+                                    task.priority
+                                  )}`,
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleTaskClick(task, day);
+                                }}
+                                title={`${getTaskTypeIcon(task.type)} ${task.title} - ${task.course || ""} (${
                                   task.priority
-                                )}`,
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTaskClick(task, day);
-                              }}
-                              title={`${task.title} - ${task.course || ""} (${
-                                task.priority
-                              } priority)`}
-                            >
-                              <div className="task-title">{task.title}</div>
-                              {task.due_time && (
-                                <div className="task-time">{task.due_time}</div>
-                              )}
-                            </div>
-                          ))}
+                                } priority)`}
+                              >
+                                <div className="task-title">
+                                  <span className="task-type-icon">{getTaskTypeIcon(task.type)}</span>
+                                  {task.title}
+                                </div>
+                                {task.due_time && (
+                                  <div className="task-time">⏰ {task.due_time}</div>
+                                )}
+                              </div>
+                            );
+                          })}
                           {dayTasks.length > 5 && (
                             <div className="more-tasks">
                               +{dayTasks.length - 5} more
@@ -381,7 +403,10 @@ export default function WeeklyCalendar({
         >
           <div className="task-modal" onClick={(e) => e.stopPropagation()}>
             <div className="task-modal-header">
-              <h3>{selectedTask.task.title}</h3>
+              <h3>
+                <span className="task-modal-icon">{getTaskTypeIcon(selectedTask.task.type)}</span>
+                {selectedTask.task.title}
+              </h3>
               <button
                 className="modal-close-button"
                 onClick={() => setSelectedTask(null)}
@@ -472,7 +497,12 @@ export default function WeeklyCalendar({
               {selectedTask.task.description && (
                 <div className="task-description">
                   <h4>{t("description") || "Description"}</h4>
-                  <p>{selectedTask.task.description}</p>
+                  <div
+                    className="task-description-content"
+                    dangerouslySetInnerHTML={{
+                      __html: truncateText(selectedTask.task.description, 1000)
+                    }}
+                  />
                 </div>
               )}
             </div>

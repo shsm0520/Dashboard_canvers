@@ -200,11 +200,42 @@
   backdrop-filter: blur(10px);
   transition: all 0.3s ease;
   border-left: 4px solid var(--accent-primary);
+  cursor: pointer;
+  position: relative;
 }
 
 .course-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 15px 35px var(--shadow-medium);
+}
+
+.course-card.selected {
+  border: 2px solid var(--accent-primary);
+  box-shadow: 0 15px 35px var(--shadow-medium);
+  transform: translateY(-3px);
+  background: linear-gradient(135deg, var(--background-primary) 0%, rgba(99, 102, 241, 0.1) 100%);
+}
+
+.course-card.selected::before {
+  content: '✓';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: var(--accent-primary);
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.8rem;
+}
+
+.course-card.dimmed {
+  opacity: 0.4;
+  transform: scale(0.98);
 }
 
 .course-card h3 {

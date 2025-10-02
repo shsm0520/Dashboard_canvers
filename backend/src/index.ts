@@ -240,6 +240,9 @@ interface CanvasAssignment {
   workflow_state: string;
   html_url: string;
   has_submitted_submissions?: boolean;
+  is_quiz_assignment?: boolean; // True if this assignment is linked to a quiz
+  quiz_id?: number; // Quiz ID if this is a quiz assignment
+  is_quiz_lti_assignment?: boolean; // True if this is an LTI quiz assignment
 }
 
 interface CanvasPlannerItem {
@@ -286,6 +289,7 @@ interface CanvasModuleItem {
   page_url?: string;
   external_url?: string;
   new_tab?: boolean;
+  quiz_lti?: boolean; // True if this is an LTI quiz
   completion_requirement?: {
     type: string;
     min_score?: number;
@@ -297,8 +301,56 @@ interface CanvasModuleItem {
     locked_for_user?: boolean;
     lock_explanation?: string;
   };
-  published?: boolean;
 }
+
+interface CanvasQuiz {
+  id: number;
+  title: string;
+  html_url: string;
+  mobile_url?: string;
+  description?: string;
+  quiz_type: 'practice_quiz' | 'assignment' | 'graded_survey' | 'survey';
+  time_limit?: number | null;
+  shuffle_answers: boolean;
+  show_correct_answers: boolean;
+  allowed_attempts: number;
+  question_count: number;
+  points_possible?: number | null;
+  due_at?: string | null;
+  lock_at?: string | null;
+  unlock_at?: string | null;
+  published: boolean;
+  assignment_id?: number | null;
+}
+
+const fetchCanvasQuizzes = async (
+  canvasToken: string,
+  courseId: number
+): Promise<CanvasQuiz[]> => {
+  try {
+    const response = await fetch(
+      `https://uc.instructure.com/api/v1/courses/${courseId}/quizzes`,
+      {
+        headers: {
+          Authorization: `Bearer ${canvasToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error(`Failed to fetch quizzes for course ${courseId}: ${response.status}`);
+      return [];
+    }
+
+    const quizzes: CanvasQuiz[] = await response.json();
+    console.log(`Fetched ${quizzes.length} quizzes from course ${courseId}`);
+    return quizzes.filter(quiz => quiz.published); // Only return published quizzes
+  } catch (error) {
+    console.error(`Error fetching Canvas quizzes for course ${courseId}:`, error);
+    return [];
+  }
+};
 
 const fetchCanvasCourses = async (
   canvasToken: string
@@ -330,13 +382,14 @@ const fetchCanvasCourses = async (
   }
 };
 
-const fetchCanvasAssignments = async (
+const fetchCanvasAssignment = async (
   canvasToken: string,
-  courseId: number
-): Promise<CanvasAssignment[]> => {
+  courseId: number,
+  assignmentId: number
+): Promise<CanvasAssignment | null> => {
   try {
     const response = await fetch(
-      `https://uc.instructure.com/api/v1/courses/${courseId}/assignments?include[]=submission&include[]=overrides&include[]=all_dates`,
+      `https://uc.instructure.com/api/v1/courses/${courseId}/assignments/${assignmentId}`,
       {
         headers: {
           Authorization: `Bearer ${canvasToken}`,
@@ -346,22 +399,65 @@ const fetchCanvasAssignments = async (
     );
 
     if (!response.ok) {
-      throw new Error(
-        `Canvas API error: ${response.status} ${response.statusText}`
-      );
+      console.warn(`Failed to fetch assignment ${assignmentId}: ${response.status}`);
+      return null;
     }
 
-    const assignments: CanvasAssignment[] = await response.json();
+    const assignment: CanvasAssignment = await response.json();
+    return assignment;
+  } catch (error) {
+    console.error(`Error fetching Canvas assignment ${assignmentId}:`, error);
+    return null;
+  }
+};
 
-    // Filter out unpublished assignments
-    // Note: Keep assignments without due dates as they may be reading materials
-    return assignments.filter((assignment) =>
-      assignment.published &&
-      assignment.workflow_state === 'published'
-    );
+const fetchCanvasAssignments = async (
+  canvasToken: string,
+  courseId: number
+): Promise<CanvasAssignment[]> => {
+  try {
+    // Fetch both 'upcoming' and 'future' buckets to get all future assignments
+    const buckets = ['upcoming', 'future'];
+    const allAssignments = new Map<number, CanvasAssignment>();
+
+    for (const bucket of buckets) {
+      try {
+        const response = await fetch(
+          `https://uc.instructure.com/api/v1/courses/${courseId}/assignments?bucket=${bucket}&include[]=submission&include[]=overrides&include[]=all_dates&per_page=100`,
+          {
+            headers: {
+              Authorization: `Bearer ${canvasToken}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (!response.ok) {
+          console.warn(`Failed to fetch ${bucket} assignments: ${response.status}`);
+          continue;
+        }
+
+        const assignments: CanvasAssignment[] = await response.json();
+        console.log(`Bucket '${bucket}': ${assignments.length} assignments`);
+
+        // Add to map (deduplicates by ID)
+        assignments.forEach(assignment => {
+          if (assignment.published && assignment.workflow_state === 'published') {
+            allAssignments.set(assignment.id, assignment);
+          }
+        });
+      } catch (error) {
+        console.warn(`Error fetching ${bucket} assignments:`, error);
+        continue;
+      }
+    }
+
+    const result = Array.from(allAssignments.values());
+    console.log(`Total unique assignments: ${result.length}`);
+    return result;
   } catch (error) {
     console.error(`Error fetching Canvas assignments for course ${courseId}:`, error);
-    throw error;
+    return [];
   }
 };
 
@@ -521,12 +617,19 @@ const syncCanvasAssignmentsToTasks = async (
       );
 
       if (!existingTask) {
-        console.log(`Creating task: ${assignment.name} - Due: ${dueDateStr} at ${dueTimeStr}`);
+        // Determine if this is a quiz/exam based on submission types or quiz flags
+        const isQuiz = assignment.is_quiz_assignment ||
+                      assignment.is_quiz_lti_assignment ||
+                      assignment.submission_types.includes('online_quiz') ||
+                      assignment.submission_types.includes('external_tool');
+        const taskType = isQuiz ? 'exam' : 'assignment';
+
+        console.log(`Creating task: ${assignment.name} - Type: ${taskType} - Due: ${dueDateStr} at ${dueTimeStr}`);
         await createTask({
           user_id: userId,
           title: assignment.name,
           description: assignment.description || undefined,
-          type: 'assignment',
+          type: taskType,
           course: courseName || undefined,
           due_date: dueDateStr,
           due_time: dueTimeStr || undefined,
@@ -535,10 +638,17 @@ const syncCanvasAssignmentsToTasks = async (
         });
       } else {
         console.log(`Task exists: ${assignment.name} - Current due_date in DB: ${existingTask.due_date}, New: ${dueDateStr}`);
-        // Update existing task with new due date (keep current completion status)
+        // Determine task type
+        const isQuiz = assignment.is_quiz_assignment ||
+                      assignment.is_quiz_lti_assignment ||
+                      assignment.submission_types.includes('online_quiz') ||
+                      assignment.submission_types.includes('external_tool');
+        const taskType = isQuiz ? 'exam' : 'assignment';
+
+        // Update existing task with new due date and type (keep current completion status)
         await runQuery(
-          "UPDATE tasks SET due_date = ?, due_time = ? WHERE id = ?",
-          [dueDateStr, dueTimeStr, existingTask.id]
+          "UPDATE tasks SET due_date = ?, due_time = ?, type = ? WHERE id = ?",
+          [dueDateStr, dueTimeStr, taskType, existingTask.id]
         );
       }
     }
@@ -548,10 +658,78 @@ const syncCanvasAssignmentsToTasks = async (
   }
 };
 
+const syncCanvasQuizzesToTasks = async (
+  userId: number,
+  quizzes: CanvasQuiz[],
+  courseName: string,
+  clientTimezone?: string,
+  clientOffset?: number
+): Promise<number> => {
+  let quizCount = 0;
+
+  try {
+    for (const quiz of quizzes) {
+      // Skip quizzes without due dates or practice quizzes
+      if (!quiz.due_at || quiz.quiz_type === 'practice_quiz') {
+        continue;
+      }
+
+      const dueDate = new Date(quiz.due_at);
+      const dueDateStr = extractDateFromCanvasTimestamp(
+        quiz.due_at,
+        clientTimezone,
+        clientOffset
+      );
+
+      const dueTimeStr = dueDate.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      // Check if task already exists
+      const existingTask = await getQuery(
+        "SELECT id, due_date FROM tasks WHERE user_id = ? AND title = ? AND course = ?",
+        [userId, quiz.title, courseName]
+      );
+
+      if (!existingTask) {
+        console.log(`Creating task from quiz: ${quiz.title} - Due: ${dueDateStr} at ${dueTimeStr}`);
+        await createTask({
+          user_id: userId,
+          title: quiz.title,
+          description: quiz.description || `${quiz.quiz_type} - ${quiz.question_count} questions${quiz.time_limit ? `, ${quiz.time_limit} minutes` : ''}`,
+          type: quiz.quiz_type === 'survey' ? 'other' : 'exam',
+          course: courseName || undefined,
+          due_date: dueDateStr,
+          due_time: dueTimeStr || undefined,
+          priority: quiz.quiz_type === 'assignment' ? 'high' : 'medium',
+          completed: false,
+        });
+        quizCount++;
+      } else {
+        console.log(`Task exists from quiz: ${quiz.title}`);
+        // Update existing task
+        await runQuery(
+          "UPDATE tasks SET due_date = ?, due_time = ?, description = ? WHERE id = ?",
+          [dueDateStr, dueTimeStr, quiz.description || `${quiz.quiz_type} - ${quiz.question_count} questions`, existingTask.id]
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error syncing Canvas quizzes to tasks:", error);
+    throw error;
+  }
+
+  return quizCount;
+};
+
 const syncCanvasModulesToTasks = async (
   userId: number,
   modules: CanvasModule[],
   courseName: string,
+  canvasToken: string,
+  courseId: number,
   clientTimezone?: string,
   clientOffset?: number
 ): Promise<number> => {
@@ -562,15 +740,39 @@ const syncCanvasModulesToTasks = async (
       if (!module.items || module.items.length === 0) continue;
 
       for (const item of module.items) {
-        // Only process Assignment and Quiz types with due dates
-        if ((item.type !== 'Assignment' && item.type !== 'Quiz') ||
-            !item.content_details?.due_at) {
+        // Only process Assignment and Quiz types
+        if (item.type !== 'Assignment' && item.type !== 'Quiz') {
           continue;
         }
 
-        const dueDate = new Date(item.content_details.due_at);
+        // Check if content_details has due_at
+        let dueAt: string | null = item.content_details?.due_at || null;
+        let description = `Module: ${module.name}`;
+
+        // If no due date in content_details, fetch assignment details
+        if (!dueAt && item.content_id) {
+          console.log(`⚠️ No content_details for ${item.title} (quiz_lti: ${item.quiz_lti})`);
+          console.log(`Fetching assignment details for ${item.title} (ID: ${item.content_id})`);
+          const assignmentDetails = await fetchCanvasAssignment(canvasToken, courseId, item.content_id);
+
+          if (assignmentDetails) {
+            console.log(`✓ Found assignment details: due_at=${assignmentDetails.due_at}`);
+            dueAt = assignmentDetails.due_at;
+            description = assignmentDetails.description || description;
+          } else {
+            console.log(`✗ Failed to fetch assignment details for ${item.title}`);
+          }
+        }
+
+        // Skip if still no due date
+        if (!dueAt) {
+          console.log(`Skipping ${item.title} - no due date`);
+          continue;
+        }
+
+        const dueDate = new Date(dueAt);
         const dueDateStr = extractDateFromCanvasTimestamp(
-          item.content_details.due_at,
+          dueAt,
           clientTimezone,
           clientOffset
         );
@@ -588,12 +790,13 @@ const syncCanvasModulesToTasks = async (
         );
 
         if (!existingTask) {
-          console.log(`Creating task from module: ${item.title} - Due: ${dueDateStr} at ${dueTimeStr}`);
+          const taskType = (item.type === 'Quiz' || item.quiz_lti) ? 'exam' : 'assignment';
+          console.log(`Creating task from module: ${item.title} - Type: ${taskType} - Due: ${dueDateStr} at ${dueTimeStr}`);
           await createTask({
             user_id: userId,
             title: item.title,
-            description: `Module: ${module.name}`,
-            type: item.type === 'Quiz' ? 'exam' : 'assignment',
+            description: description,
+            type: taskType,
             course: courseName || undefined,
             due_date: dueDateStr,
             due_time: dueTimeStr || undefined,
@@ -604,9 +807,10 @@ const syncCanvasModulesToTasks = async (
         } else {
           console.log(`Task exists from module: ${item.title}`);
           // Update existing task
+          const taskType = (item.type === 'Quiz' || item.quiz_lti) ? 'exam' : 'assignment';
           await runQuery(
-            "UPDATE tasks SET due_date = ?, due_time = ?, completed = ? WHERE id = ?",
-            [dueDateStr, dueTimeStr, item.completion_requirement?.completed || false, existingTask.id]
+            "UPDATE tasks SET due_date = ?, due_time = ?, description = ?, type = ?, completed = ? WHERE id = ?",
+            [dueDateStr, dueTimeStr, description, taskType, item.completion_requirement?.completed || false, existingTask.id]
           );
         }
       }
@@ -883,11 +1087,10 @@ app.post("/api/login", async (req, res) => {
           const startDateStr = startDate.toISOString().split('T')[0];
           const endDateStr = endDate.toISOString().split('T')[0];
 
-          // Use Course Assignments API directly (Planner API doesn't return assignments)
-          console.log(`Using Course Assignments API for all ${canvasCourses.length} courses...`);
+          // Use Course Assignments API with 'upcoming' bucket
+          console.log(`Syncing upcoming assignments for all ${canvasCourses.length} courses...`);
 
           let totalAssignments = 0;
-          let totalModuleItems = 0;
 
           for (const course of canvasCourses) {
             try {
@@ -896,31 +1099,21 @@ app.post("/api/login", async (req, res) => {
                 .replace(/\s*\(\d+\)\s*$/, "")
                 .trim();
 
-              // Sync assignments
+              // Sync assignments (includes LTI quizzes)
               const assignments = await fetchCanvasAssignments(user.canvas_token, course.id);
-              console.log(`\n=== COURSE ASSIGNMENTS API (${cleanCourseName}) ===`);
-              assignments.forEach(assignment => {
-                console.log(`Assignment: ${assignment.name} - Due: ${assignment.due_at}`);
-              });
-              console.log(`=================================================\n`);
+              console.log(`\n=== ${cleanCourseName} ===`);
+              console.log(`Found ${assignments.length} upcoming assignments/quizzes`);
+
               await syncCanvasAssignmentsToTasks(user.id, assignments, cleanCourseName, clientTimezone, clientOffset);
               totalAssignments += assignments.length;
-
-              // Sync modules (to catch assignments that might be in modules but not in assignments API)
-              const modules = await fetchCanvasModules(user.canvas_token, course.id);
-              console.log(`\n=== COURSE MODULES API (${cleanCourseName}) ===`);
-              console.log(`Found ${modules.length} modules`);
-              console.log(`=================================================\n`);
-              const moduleItemCount = await syncCanvasModulesToTasks(user.id, modules, cleanCourseName, clientTimezone, clientOffset);
-              totalModuleItems += moduleItemCount;
             } catch (error) {
               console.warn(`Failed to sync data for course ${course.id}:`, error);
             }
           }
-          console.log(`Auto-synced ${totalAssignments} Canvas assignments and ${totalModuleItems} module items for ${username}`);
+          console.log(`\n✅ Auto-synced ${totalAssignments} total assignments/quizzes for ${username}`);
 
           // Log successful sync
-          await logSync(user.id, 'login', 'success', totalAssignments, totalModuleItems);
+          await logSync(user.id, 'login', 'success', totalAssignments, 0);
         } catch (error) {
           console.warn(`Failed to auto-sync Canvas data for ${username}:`, error);
           await logSync(user.id, 'login', 'failed', 0, 0, error instanceof Error ? error.message : 'Unknown error');
@@ -1088,10 +1281,9 @@ app.post("/api/reset-and-sync-canvas", authenticateToken, async (req, res) => {
     const endDateStr = endDate.toISOString().split('T')[0];
 
     let assignmentCount = 0;
-    let moduleItemCount = 0;
 
-    // Use Course Assignments API directly (Planner API doesn't return assignments)
-    console.log(`Using Course Assignments API and Modules API for all ${canvasCourses.length} courses...`);
+    // Use Course Assignments API with 'upcoming' bucket
+    console.log(`Syncing upcoming assignments for all ${canvasCourses.length} courses...`);
 
     for (const course of canvasCourses) {
       try {
@@ -1100,35 +1292,23 @@ app.post("/api/reset-and-sync-canvas", authenticateToken, async (req, res) => {
           .replace(/\s*\(\d+\)\s*$/, "")
           .trim();
 
-        // Sync assignments
+        // Sync assignments (includes LTI quizzes)
         const assignments = await fetchCanvasAssignments(user.canvas_token, course.id);
-        console.log(`\n=== COURSE ASSIGNMENTS API (${cleanCourseName}) ===`);
-        assignments.forEach(assignment => {
-          console.log(`Assignment: ${assignment.name} - Due: ${assignment.due_at}`);
-        });
-        console.log(`=================================================\n`);
+        console.log(`\n=== ${cleanCourseName}: ${assignments.length} assignments/quizzes`);
+
         await syncCanvasAssignmentsToTasks(user.id, assignments, cleanCourseName, clientTimezone, clientOffset);
         assignmentCount += assignments.length;
-
-        // Sync modules
-        const modules = await fetchCanvasModules(user.canvas_token, course.id);
-        console.log(`\n=== COURSE MODULES API (${cleanCourseName}) ===`);
-        console.log(`Found ${modules.length} modules`);
-        console.log(`=================================================\n`);
-        const itemCount = await syncCanvasModulesToTasks(user.id, modules, cleanCourseName, clientTimezone, clientOffset);
-        moduleItemCount += itemCount;
       } catch (error) {
         console.warn(`Failed to sync data for course ${course.id}:`, error);
       }
     }
-    console.log(`Re-synced ${assignmentCount} assignments and ${moduleItemCount} module items`);
+    console.log(`\n✅ Re-synced ${assignmentCount} total assignments/quizzes`);
 
     res.json({
       success: true,
-      message: `Successfully reset and re-synced all data. ${canvasCourses.length} courses, ${assignmentCount} assignments, and ${moduleItemCount} module items synced.`,
+      message: `Successfully reset and re-synced all data. ${canvasCourses.length} courses, ${assignmentCount} assignments/quizzes synced.`,
       courses: canvasCourses.length,
-      assignments: assignmentCount,
-      moduleItems: moduleItemCount
+      assignments: assignmentCount
     });
 
   } catch (error) {
@@ -1183,17 +1363,11 @@ app.post("/api/sync-canvas-assignments", authenticateToken, async (req, res) => 
           .replace(/\s*\(\d+\)\s*$/, "")
           .trim();
 
-        // Sync assignments
+        // Sync assignments (includes LTI quizzes)
         const assignments = await fetchCanvasAssignments(user.canvas_token, course.id);
-        console.log(`Course ${course.id} (${course.longName}): ${assignments.length} assignments`);
+        console.log(`${cleanCourseName}: ${assignments.length} assignments/quizzes`);
         await syncCanvasAssignmentsToTasks(user.id, assignments, cleanCourseName, clientTimezone, clientOffset);
         assignmentCount += assignments.length;
-
-        // Sync modules
-        const modules = await fetchCanvasModules(user.canvas_token, course.id);
-        console.log(`Course ${course.id} (${course.longName}): ${modules.length} modules`);
-        const itemCount = await syncCanvasModulesToTasks(user.id, modules, cleanCourseName, clientTimezone, clientOffset);
-        moduleItemCount += itemCount;
       } catch (error) {
         console.warn(`Failed to sync data for course ${course.id}:`, error);
       }
@@ -1201,9 +1375,8 @@ app.post("/api/sync-canvas-assignments", authenticateToken, async (req, res) => 
 
     res.json({
       success: true,
-      message: `Successfully synced ${assignmentCount} assignments and ${moduleItemCount} module items from Canvas`,
-      assignmentCount: assignmentCount,
-      moduleItemCount: moduleItemCount,
+      message: `Successfully synced ${assignmentCount} assignments/quizzes from Canvas`,
+      assignmentCount: assignmentCount
     });
   } catch (error) {
     console.error("Error syncing Canvas assignments:", error);
@@ -1534,9 +1707,8 @@ const syncAllActiveUsers = async () => {
         const canvasCourses = await fetchCanvasCourses(user.canvas_token);
         await syncCanvasCoursesToDatabase(user.id, canvasCourses);
 
-        // Sync assignments and modules
+        // Sync assignments (includes LTI quizzes)
         let totalAssignments = 0;
-        let totalModuleItems = 0;
 
         for (const course of canvasCourses) {
           const cleanCourseName = (course.shortName || course.longName)
@@ -1545,20 +1717,16 @@ const syncAllActiveUsers = async () => {
             .trim();
 
           const assignments = await fetchCanvasAssignments(user.canvas_token, course.id);
-          await syncCanvasAssignmentsToTasks(user.id, assignments, cleanCourseName);
+          await syncCanvasAssignmentsToTasks(user.id, assignments, cleanCourseName, undefined, undefined);
           totalAssignments += assignments.length;
-
-          const modules = await fetchCanvasModules(user.canvas_token, course.id);
-          const moduleItemCount = await syncCanvasModulesToTasks(user.id, modules, cleanCourseName);
-          totalModuleItems += moduleItemCount;
 
           // Small delay to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        await logSync(user.id, 'background', 'success', totalAssignments, totalModuleItems);
+        await logSync(user.id, 'background', 'success', totalAssignments, 0);
         syncedCount++;
-        console.log(`✅ Synced ${user.username}: ${totalAssignments} assignments, ${totalModuleItems} module items`);
+        console.log(`✅ Synced ${user.username}: ${totalAssignments} assignments/quizzes`);
 
       } catch (error) {
         failedCount++;
