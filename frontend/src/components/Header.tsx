@@ -6,8 +6,8 @@ import "./Header.css";
 interface HeaderProps {
   user: { username: string };
   onLogout: () => void;
-  currentTab: 'dashboard' | 'assignments' | 'account';
-  onTabChange: (tab: 'dashboard' | 'assignments' | 'account') => void;
+  currentTab: "dashboard" | "assignments" | "account";
+  onTabChange: (tab: "dashboard" | "assignments" | "account") => void;
 }
 
 export default function Header({
@@ -62,22 +62,22 @@ export default function Header({
 
       <nav className="nav-tabs">
         <button
-          className={`nav-tab ${currentTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => onTabChange('dashboard')}
+          className={`nav-tab ${currentTab === "dashboard" ? "active" : ""}`}
+          onClick={() => onTabChange("dashboard")}
         >
           🏠 {t("dashboard") || "Dashboard"}
         </button>
         <button
-          className={`nav-tab ${currentTab === 'assignments' ? 'active' : ''}`}
-          onClick={() => onTabChange('assignments')}
+          className={`nav-tab ${currentTab === "assignments" ? "active" : ""}`}
+          onClick={() => onTabChange("assignments")}
         >
           📋 {t("assignments") || "Assignments"}
         </button>
         <button
-          className={`nav-tab ${currentTab === 'account' ? 'active' : ''}`}
-          onClick={() => onTabChange('account')}
+          className={`nav-tab ${currentTab === "account" ? "active" : ""}`}
+          onClick={() => onTabChange("account")}
         >
-          ⚙️ {t("account") || "Account"}
+          📜 {t("account") || "Account"}
         </button>
       </nav>
 
