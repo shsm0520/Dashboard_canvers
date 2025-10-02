@@ -40,6 +40,7 @@ export interface Task {
   due_time?: string;
   priority: "high" | "medium" | "low";
   completed: boolean;
+  submitted: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +76,13 @@ export interface CanvasAssignment {
   is_quiz_assignment?: boolean;
   quiz_id?: number;
   is_quiz_lti_assignment?: boolean;
+  submission?: {
+    id?: number;
+    user_id?: number;
+    workflow_state?: string;
+    submitted_at?: string | null;
+    grade?: string | null;
+  };
 }
 
 export interface CanvasPlannerItem {

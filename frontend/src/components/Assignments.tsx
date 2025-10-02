@@ -60,7 +60,8 @@ export default function Assignments({
     tasksData.tasks.forEach((task: any) => {
       const dueDate = new Date(task.due_date);
 
-      if (task.completed) {
+      // Tasks that are submitted or completed go to completed section
+      if (task.completed || task.submitted) {
         completed.push(task);
       } else if (dueDate < now) {
         overdue.push(task);
@@ -268,7 +269,8 @@ export default function Assignments({
                     </div>
                   )}
                   <div className="assignment-due completed-date">
-                    ✅ {formatDueDateWithTranslation(task.due_date, task.due_time)}
+                    {task.submitted ? '📤' : '✅'} {formatDueDateWithTranslation(task.due_date, task.due_time)}
+                    {task.submitted && <span className="submitted-badge"> ({t("submitted")})</span>}
                   </div>
                 </div>
               )) : (

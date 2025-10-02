@@ -126,7 +126,7 @@
   margin: 0.3rem 0;
   font-size: 0.9rem;
   color: var(--text-secondary);
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 
 /* Tablet styles */

@@ -86,6 +86,7 @@
   box-shadow: 0 4px 15px var(--shadow-light);
   border: 1px solid var(--border-color);
   border-left: 4px solid var(--accent-primary);
+  border-bottom: 4px solid var(--accent-primary);
   transition: all 0.3s ease;
   position: relative;
 }
@@ -97,7 +98,11 @@
 
 .assignment-card.completed {
   opacity: 0.8;
-  background: linear-gradient(135deg, var(--background-primary) 0%, rgba(16, 185, 129, 0.05) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--background-primary) 0%,
+    rgba(16, 185, 129, 0.05) 100%
+  );
 }
 
 .completed-badge {
@@ -200,6 +205,7 @@
   backdrop-filter: blur(10px);
   transition: all 0.3s ease;
   border-left: 4px solid var(--accent-primary);
+  border-bottom: 4px solid var(--accent-primary);
   cursor: pointer;
   position: relative;
 }
@@ -213,11 +219,15 @@
   border: 2px solid var(--accent-primary);
   box-shadow: 0 15px 35px var(--shadow-medium);
   transform: translateY(-3px);
-  background: linear-gradient(135deg, var(--background-primary) 0%, rgba(99, 102, 241, 0.1) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--background-primary) 0%,
+    rgba(99, 102, 241, 0.1) 100%
+  );
 }
 
 .course-card.selected::before {
-  content: '✓';
+  content: "✓";
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;

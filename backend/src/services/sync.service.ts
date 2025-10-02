@@ -70,6 +70,15 @@ export const syncCanvasAssignmentsToTasks = async (
         continue;
       }
 
+      // Skip optional assignments (no submission required and no points)
+      if (
+        assignment.submission_types.includes("none") &&
+        (assignment.points_possible === 0 || assignment.points_possible === null || assignment.points_possible === undefined)
+      ) {
+        console.log(`Skipping optional assignment (no submission, no points): ${assignment.name}`);
+        continue;
+      }
+
       const dueDate = new Date(assignment.due_at);
       // Extract date from Canvas timestamp (may be local time with Z suffix)
       const dueDateStr = extractDateFromCanvasTimestamp(
@@ -87,6 +96,12 @@ export const syncCanvasAssignmentsToTasks = async (
         courseName
       );
 
+      // Check if assignment has been submitted by checking submission object
+      const isSubmitted =
+        assignment.submission?.workflow_state === "submitted" ||
+        assignment.submission?.workflow_state === "graded" ||
+        (assignment.submission?.submitted_at !== null && assignment.submission?.submitted_at !== undefined);
+
       if (!existingTask) {
         // Determine if this is a quiz/exam based on submission types or quiz flags
         const isQuiz =
@@ -97,7 +112,7 @@ export const syncCanvasAssignmentsToTasks = async (
         const taskType = isQuiz ? "exam" : "assignment";
 
         console.log(
-          `Creating task: ${assignment.name} - Type: ${taskType} - Due: ${dueDateStr} at ${dueTimeStr}`
+          `Creating task: ${assignment.name} - Type: ${taskType} - Due: ${dueDateStr} at ${dueTimeStr} - Submitted: ${isSubmitted}`
         );
         await createTask({
           user_id: userId,
@@ -108,11 +123,12 @@ export const syncCanvasAssignmentsToTasks = async (
           due_date: dueDateStr,
           due_time: dueTimeStr || undefined,
           priority: "medium", // Default priority
-          completed: false, // Set to false by default, user can manually mark as completed
+          completed: isSubmitted, // Mark as completed if submitted
+          submitted: isSubmitted,
         });
       } else {
         console.log(
-          `Task exists: ${assignment.name} - Current due_date in DB: ${existingTask.due_date}, New: ${dueDateStr}`
+          `Task exists: ${assignment.name} - Current due_date in DB: ${existingTask.due_date}, New: ${dueDateStr} - Submitted: ${isSubmitted}`
         );
         // Determine task type
         const isQuiz =
@@ -122,11 +138,11 @@ export const syncCanvasAssignmentsToTasks = async (
           assignment.submission_types.includes("external_tool");
         const taskType = isQuiz ? "exam" : "assignment";
 
-        // Update existing task with new due date and type (keep current completion status)
+        // Update existing task with new due date, type, and submission status
         const { runQuery } = await import("../database");
         await runQuery(
-          "UPDATE tasks SET due_date = ?, due_time = ?, type = ? WHERE id = ?",
-          [dueDateStr, dueTimeStr, taskType, existingTask.id]
+          "UPDATE tasks SET due_date = ?, due_time = ?, type = ?, submitted = ?, completed = ? WHERE id = ?",
+          [dueDateStr, dueTimeStr, taskType, isSubmitted, isSubmitted, existingTask.id]
         );
       }
     }
@@ -186,6 +202,7 @@ export const syncCanvasQuizzesToTasks = async (
           due_time: dueTimeStr || undefined,
           priority: quiz.quiz_type === "assignment" ? "high" : "medium",
           completed: false,
+          submitted: false,
         });
         quizCount++;
       } else {
@@ -302,6 +319,7 @@ export const syncCanvasModulesToTasks = async (
             due_time: dueTimeStr || undefined,
             priority: "medium",
             completed: item.completion_requirement?.completed || false,
+            submitted: false,
           });
           assignmentCount++;
         } else {
@@ -376,16 +394,17 @@ export const syncCanvasPlannerItemsToTasks = async (
           due_time: dueTimeStr || undefined,
           priority: "medium", // Default priority
           completed: hasSubmission || false,
+          submitted: hasSubmission || false,
         });
       } else {
         console.log(
           `Task exists: ${item.plannable.title} - Current due_date in DB: ${existingTask.due_date}, New: ${dueDateStr}`
         );
-        // Update existing task with new due date and completion status
+        // Update existing task with new due date, submission status, and completion status
         const { runQuery } = await import("../database");
         await runQuery(
-          "UPDATE tasks SET completed = ?, due_date = ?, due_time = ? WHERE id = ?",
-          [hasSubmission || false, dueDateStr, dueTimeStr, existingTask.id]
+          "UPDATE tasks SET submitted = ?, completed = ?, due_date = ?, due_time = ? WHERE id = ?",
+          [hasSubmission || false, hasSubmission || false, dueDateStr, dueTimeStr, existingTask.id]
         );
       }
     }

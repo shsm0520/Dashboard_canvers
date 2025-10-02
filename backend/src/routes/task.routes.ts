@@ -79,6 +79,7 @@ router.post("/", authenticateToken, async (req, res) => {
       due_time: due_time || undefined,
       priority,
       completed: false,
+      submitted: false,
     });
 
     res.status(201).json({

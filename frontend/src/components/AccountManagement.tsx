@@ -114,7 +114,7 @@ export default function AccountManagement({
     setLoading(true);
     try {
       const token = getToken();
-      const response = await fetch("http://localhost:5000/api/sync-canvas-assignments", {
+      const response = await fetch("http://localhost:5000/api/courses/sync-canvas-assignments", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -149,7 +149,7 @@ export default function AccountManagement({
     setLoading(true);
     try {
       const token = getToken();
-      const response = await fetch("http://localhost:5000/api/reset-and-sync-canvas", {
+      const response = await fetch("http://localhost:5000/api/courses/reset-and-sync-canvas", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

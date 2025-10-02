@@ -2,7 +2,7 @@ import React from "react";
 import { useCourses, useTasks } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useLanguage } from "../contexts/LanguageContext";
-import { formatDateLocal, formatDateShort } from "../utils/dateUtils";
+import { formatDateLocal } from "../utils/dateUtils";
 import Header from "./Header";
 import WeeklyCalendar from "./WeeklyCalendar";
 import "./Dashboard.css";
@@ -20,9 +20,11 @@ export default function Dashboard({
   currentTab,
   onTabChange,
 }: DashboardProps) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { getCourseColor } = useCourseColors();
-  const [selectedCourse, setSelectedCourse] = React.useState<string | null>(null);
+  const [selectedCourse, setSelectedCourse] = React.useState<string | null>(
+    null
+  );
 
   const {
     data: coursesData,
@@ -39,10 +41,7 @@ export default function Dashboard({
   const oneWeekAgo = new Date(today);
   oneWeekAgo.setDate(today.getDate() - 7);
 
-  const { data: tasksData, isLoading: tasksLoading } = useTasks(
-    formatDateLocal(oneWeekAgo),
-    formatDateLocal(nextWeek)
-  );
+  useTasks(formatDateLocal(oneWeekAgo), formatDateLocal(nextWeek));
 
   return (
     <div className="dashboard-container">
@@ -67,11 +66,22 @@ export default function Dashboard({
               coursesData.courses.map((course: any) => (
                 <div
                   key={course.id}
-                  className={`course-card ${selectedCourse === course.name ? 'selected' : ''} ${selectedCourse && selectedCourse !== course.name ? 'dimmed' : ''}`}
+                  className={`course-card ${
+                    selectedCourse === course.name ? "selected" : ""
+                  } ${
+                    selectedCourse && selectedCourse !== course.name
+                      ? "dimmed"
+                      : ""
+                  }`}
                   style={{
                     borderLeftColor: getCourseColor(course.name),
+                    borderBottomColor: getCourseColor(course.name),
                   }}
-                  onClick={() => setSelectedCourse(selectedCourse === course.name ? null : course.name)}
+                  onClick={() =>
+                    setSelectedCourse(
+                      selectedCourse === course.name ? null : course.name
+                    )
+                  }
                 >
                   <h3>{course.name}</h3>
                   {course.professor && course.professor !== "N/A" && (
