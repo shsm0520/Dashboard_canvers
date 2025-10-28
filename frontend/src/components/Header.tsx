@@ -1,6 +1,8 @@
 import { useHealthStatus } from "../hooks/useApi";
+import { getToken } from "../utils/authUtils";
 import { useLanguage } from "../contexts/LanguageContext";
 import SettingsDropdown from "./SettingsDropdown";
+import Clock from "./Clock";
 import "./Header.css";
 
 interface HeaderProps {
@@ -22,7 +24,7 @@ export default function Header({
 
   const handleLogout = async () => {
     try {
-      const token = localStorage.getItem("dashboard_token");
+      const token = getToken();
       if (token) {
         await fetch("http://localhost:5000/api/logout", {
           method: "POST",
@@ -82,6 +84,7 @@ export default function Header({
       </nav>
 
       <div className="header-right">
+        <Clock />
         <span className="welcome-text">
           {t("welcome")}, {user.username}!
         </span>

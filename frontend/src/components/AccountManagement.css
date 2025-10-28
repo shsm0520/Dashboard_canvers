@@ -198,7 +198,7 @@
 }
 
 .token-preview {
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
   color: #666;
   background: #f8f9fa;
@@ -239,7 +239,7 @@
   border: 2px solid #e1e1e1;
   border-radius: 8px;
   font-size: 0.95rem;
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
   transition: all 0.3s ease;
   box-sizing: border-box;
   min-height: 48px;

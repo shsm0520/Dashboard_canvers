@@ -22,6 +22,9 @@ export default function Dashboard({
 }: DashboardProps) {
   const { t } = useLanguage();
   const { getCourseColor } = useCourseColors();
+  const [selectedCourse, setSelectedCourse] = React.useState<string | null>(
+    null
+  );
 
   const {
     data: coursesData,
@@ -38,10 +41,7 @@ export default function Dashboard({
   const oneWeekAgo = new Date(today);
   oneWeekAgo.setDate(today.getDate() - 7);
 
-  const { data: tasksData, isLoading: tasksLoading } = useTasks(
-    formatDateLocal(oneWeekAgo),
-    formatDateLocal(nextWeek)
-  );
+  useTasks(formatDateLocal(oneWeekAgo), formatDateLocal(nextWeek));
 
   return (
     <div className="dashboard-container">
@@ -66,10 +66,22 @@ export default function Dashboard({
               coursesData.courses.map((course: any) => (
                 <div
                   key={course.id}
-                  className="course-card"
+                  className={`course-card ${
+                    selectedCourse === course.name ? "selected" : ""
+                  } ${
+                    selectedCourse && selectedCourse !== course.name
+                      ? "dimmed"
+                      : ""
+                  }`}
                   style={{
                     borderLeftColor: getCourseColor(course.name),
+                    borderBottomColor: getCourseColor(course.name),
                   }}
+                  onClick={() =>
+                    setSelectedCourse(
+                      selectedCourse === course.name ? null : course.name
+                    )
+                  }
                 >
                   <h3>{course.name}</h3>
                   {course.professor && course.professor !== "N/A" && (
@@ -135,7 +147,7 @@ export default function Dashboard({
                       </div>
                     )}
                     <div className="assignment-due">
-                      📅 {new Date(task.due_date).toLocaleDateString()}
+                      📅 {formatDateShort(new Date(task.due_date), language)}
                       {task.due_time && ` ${task.due_time}`}
                     </div>
                   </div>
@@ -151,6 +163,7 @@ export default function Dashboard({
         <div className="calendar-section">
           <WeeklyCalendar
             onDateSelect={(date) => console.log("Selected date:", date)}
+            selectedCourse={selectedCourse}
           />
         </div>
 

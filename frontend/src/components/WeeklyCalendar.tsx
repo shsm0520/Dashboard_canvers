@@ -3,7 +3,8 @@ import { useLanguage } from "../contexts/LanguageContext";
 import { useTasks, updateTaskAPI } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useQueryClient } from "@tanstack/react-query";
-import { formatDateLocal } from "../utils/dateUtils";
+import { formatDateLocal, formatMonthDay } from "../utils/dateUtils";
+import { truncateText } from "../utils/textUtils";
 import "./WeeklyCalendar.css";
 
 interface Task {
@@ -22,12 +23,14 @@ interface Task {
   due_time?: string;
   priority: "high" | "medium" | "low";
   completed: boolean;
+  submitted: boolean;
   description?: string;
 }
 
 interface WeeklyCalendarProps {
   onDateSelect?: (date: Date) => void;
   onTaskClick?: (task: Task, date: Date) => void;
+  selectedCourse?: string | null;
 }
 
 interface WeekInfo {
@@ -44,6 +47,7 @@ interface DayTasks {
 export default function WeeklyCalendar({
   onDateSelect,
   onTaskClick,
+  selectedCourse,
 }: WeeklyCalendarProps) {
   const { t, language } = useLanguage(); // language 코드("ko" | "en")
   const { getCourseColor } = useCourseColors();
@@ -62,7 +66,7 @@ export default function WeeklyCalendar({
     // Update date when window gains focus
     const handleFocus = () => {
       setCurrentDate(new Date());
-      console.log('📅 Date updated on focus:', new Date().toDateString());
+      console.log("📅 Date updated on focus:", new Date().toDateString());
     };
 
     // Update date at midnight
@@ -76,18 +80,18 @@ export default function WeeklyCalendar({
 
       const timer = setTimeout(() => {
         setCurrentDate(new Date());
-        console.log('🌙 Date updated at midnight:', new Date().toDateString());
+        console.log("🌙 Date updated at midnight:", new Date().toDateString());
         updateDateAtMidnight(); // Schedule next midnight update
       }, timeUntilMidnight);
 
       return timer;
     };
 
-    window.addEventListener('focus', handleFocus);
+    window.addEventListener("focus", handleFocus);
     const midnightTimer = updateDateAtMidnight();
 
     return () => {
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener("focus", handleFocus);
       clearTimeout(midnightTimer);
     };
   }, []);
@@ -193,8 +197,8 @@ export default function WeeklyCalendar({
   const getTasksForDate = (date: Date): Task[] => {
     // Use local timezone instead of UTC to avoid +1 day offset
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
     const dateKey = `${year}-${month}-${day}`;
 
     const dayTasks = convertTasksToDayTasks(tasksData?.tasks || []);
@@ -214,6 +218,19 @@ export default function WeeklyCalendar({
     return colors[type];
   };
 
+  const getTaskTypeIcon = (type: Task["type"]): string => {
+    const icons = {
+      assignment: "📝",
+      exam: "📋",
+      project: "🎯",
+      meeting: "👥",
+      study: "📚",
+      deadline: "⏰",
+      other: "📌",
+    };
+    return icons[type];
+  };
+
   const getPriorityColor = (priority: Task["priority"]): string => {
     const colors = {
       high: "#ef4444",
@@ -223,35 +240,22 @@ export default function WeeklyCalendar({
     return colors[priority];
   };
 
-
   const isToday = (date: Date): boolean =>
     date.toDateString() === new Date().toDateString();
   const isSelected = (date: Date): boolean =>
     selectedDate ? date.toDateString() === selectedDate.toDateString() : false;
 
-  const formatDate = (date?: Date): string => {
-    if (!date) return "";
-    return date.toLocaleDateString(language === "ko" ? "ko-KR" : "en-US", {
-      month: "short",
-      day: "numeric",
-    });
-  };
-
-  const formatWeekRange = (start?: Date, end?: Date): string => {
+  const formatWeekRangeWithLocale = (start?: Date, end?: Date): string => {
     if (!start || !end) return "";
     const locale = language === "ko" ? "ko-KR" : "en-US";
-    const startMonth = start.getMonth();
-    const endMonth = end.getMonth();
-    const formatMonthDay = (d: Date) =>
-      d.toLocaleDateString(locale, { month: "short", day: "numeric" });
 
-    if (startMonth === endMonth) {
+    if (start.getMonth() === end.getMonth()) {
       const monthStr = start.toLocaleDateString(locale, { month: "short" });
       return language === "ko"
         ? `${monthStr} ${start.getDate()}–${end.getDate()}일`
         : `${monthStr} ${start.getDate()}–${end.getDate()}`;
     }
-    return `${formatMonthDay(start)} – ${formatMonthDay(end)}`;
+    return `${formatMonthDay(start, locale)} – ${formatMonthDay(end, locale)}`;
   };
 
   const dayNames = [
@@ -286,7 +290,7 @@ export default function WeeklyCalendar({
         <h2>{t("weekly_schedule") || "주간 일정"}</h2>
         <p className="calendar-subtitle">
           {weeks[0]?.startDate && weeks[3]?.endDate
-            ? formatWeekRange(weeks[0].startDate, weeks[3].endDate)
+            ? formatWeekRangeWithLocale(weeks[0].startDate, weeks[3].endDate)
             : "Loading..."}
         </p>
       </div>
@@ -304,7 +308,7 @@ export default function WeeklyCalendar({
                   {t("week") || "Week"} {week.weekNumber}
                 </span>
                 <span className="week-range">
-                  {formatWeekRange(week.startDate, week.endDate)}
+                  {formatWeekRangeWithLocale(week.startDate, week.endDate)}
                 </span>
                 {isCurrentWeek && (
                   <span className="current-week-badge">
@@ -331,32 +335,47 @@ export default function WeeklyCalendar({
 
                       {dayTasks.length > 0 && (
                         <div className="day-tasks">
-                          {dayTasks.slice(0, 5).map((task) => (
-                            <div
-                              key={task.id}
-                              className={`task-item ${
-                                task.completed ? "completed" : ""
-                              }`}
-                              style={{
-                                backgroundColor: task.course ? getCourseColor(task.course) : getTaskTypeColor(task.type),
-                                borderLeft: `3px solid ${getPriorityColor(
+                          {dayTasks.slice(0, 5).map((task) => {
+                            const isHighlighted =
+                              !selectedCourse || task.course === selectedCourse;
+                            return (
+                              <div
+                                key={task.id}
+                                className={`task-item ${
+                                  task.completed ? "completed" : ""
+                                } ${isHighlighted ? "highlighted" : "dimmed"}`}
+                                style={{
+                                  backgroundColor: task.course
+                                    ? getCourseColor(task.course)
+                                    : getTaskTypeColor(task.type),
+                                  borderLeft: `3px solid ${getPriorityColor(
+                                    task.priority
+                                  )}`,
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleTaskClick(task, day);
+                                }}
+                                title={`${getTaskTypeIcon(task.type)} ${
+                                  task.title
+                                } - ${task.course || ""} (${
                                   task.priority
-                                )}`,
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTaskClick(task, day);
-                              }}
-                              title={`${task.title} - ${task.course || ""} (${
-                                task.priority
-                              } priority)`}
-                            >
-                              <div className="task-title">{task.title}</div>
-                              {task.due_time && (
-                                <div className="task-time">{task.due_time}</div>
-                              )}
-                            </div>
-                          ))}
+                                } priority)`}
+                              >
+                                <div className="task-title">
+                                  <span className="task-type-icon">
+                                    {getTaskTypeIcon(task.type)}
+                                  </span>
+                                  {task.title}
+                                </div>
+                                {task.due_time && (
+                                  <div className="task-time">
+                                    ⏰ {task.due_time}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                           {dayTasks.length > 5 && (
                             <div className="more-tasks">
                               +{dayTasks.length - 5} more
@@ -381,7 +400,12 @@ export default function WeeklyCalendar({
         >
           <div className="task-modal" onClick={(e) => e.stopPropagation()}>
             <div className="task-modal-header">
-              <h3>{selectedTask.task.title}</h3>
+              <h3>
+                <span className="task-modal-icon">
+                  {getTaskTypeIcon(selectedTask.task.type)}
+                </span>
+                {selectedTask.task.title}
+              </h3>
               <button
                 className="modal-close-button"
                 onClick={() => setSelectedTask(null)}
@@ -472,7 +496,12 @@ export default function WeeklyCalendar({
               {selectedTask.task.description && (
                 <div className="task-description">
                   <h4>{t("description") || "Description"}</h4>
-                  <p>{selectedTask.task.description}</p>
+                  <div
+                    className="task-description-content"
+                    dangerouslySetInnerHTML={{
+                      __html: truncateText(selectedTask.task.description, 1000),
+                    }}
+                  />
                 </div>
               )}
             </div>

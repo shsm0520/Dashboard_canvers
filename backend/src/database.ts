@@ -61,6 +61,7 @@ export const initializeDatabase = (): Promise<void> => {
           due_time TEXT,
           priority TEXT NOT NULL DEFAULT 'medium',
           completed BOOLEAN DEFAULT FALSE,
+          submitted BOOLEAN DEFAULT FALSE,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users (id)
@@ -90,9 +91,29 @@ export const initializeDatabase = (): Promise<void> => {
           message TEXT,
           timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
-      `, (err) => {
+      `);
+
+      // Migration: Add submitted column to tasks table if it doesn't exist
+      db.all("PRAGMA table_info(tasks)", [], (err, columns: any[]) => {
         if (err) {
+          console.error("Error checking tasks table:", err);
           reject(err);
+          return;
+        }
+
+        const hasSubmittedColumn = columns.some((col) => col.name === "submitted");
+
+        if (!hasSubmittedColumn) {
+          console.log("Adding 'submitted' column to tasks table...");
+          db.run("ALTER TABLE tasks ADD COLUMN submitted BOOLEAN DEFAULT FALSE", (alterErr) => {
+            if (alterErr) {
+              console.error("Error adding submitted column:", alterErr);
+              reject(alterErr);
+            } else {
+              console.log("Successfully added 'submitted' column");
+              resolve();
+            }
+          });
         } else {
           resolve();
         }

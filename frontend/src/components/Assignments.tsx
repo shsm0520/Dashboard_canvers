@@ -3,7 +3,7 @@ import { useTasks, updateTaskAPI } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useLanguage } from "../contexts/LanguageContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { formatDateLocal } from "../utils/dateUtils";
+import { formatDateLocal, formatDueDate } from "../utils/dateUtils";
 import Header from "./Header";
 import "./Assignments.css";
 
@@ -20,7 +20,7 @@ export default function Assignments({
   currentTab,
   onTabChange,
 }: AssignmentsProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { getCourseColor } = useCourseColors();
   const queryClient = useQueryClient();
 
@@ -60,7 +60,8 @@ export default function Assignments({
     tasksData.tasks.forEach((task: any) => {
       const dueDate = new Date(task.due_date);
 
-      if (task.completed) {
+      // Tasks that are submitted or completed go to completed section
+      if (task.completed || task.submitted) {
         completed.push(task);
       } else if (dueDate < now) {
         overdue.push(task);
@@ -76,22 +77,8 @@ export default function Assignments({
     };
   };
 
-  const formatDueDate = (dateStr: string, timeStr?: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-
-    let dateText = '';
-    if (date.toDateString() === today.toDateString()) {
-      dateText = t("today") || "Today";
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      dateText = t("tomorrow") || "Tomorrow";
-    } else {
-      dateText = date.toLocaleDateString();
-    }
-
-    return timeStr ? `${dateText} ${timeStr}` : dateText;
+  const formatDueDateWithTranslation = (dateStr: string, timeStr?: string) => {
+    return formatDueDate(dateStr, timeStr, language);
   };
 
   if (tasksLoading) {
@@ -194,7 +181,7 @@ export default function Assignments({
                       </div>
                     )}
                     <div className="assignment-due overdue-date">
-                      📅 {formatDueDate(task.due_date, task.due_time)}
+                      📅 {formatDueDateWithTranslation(task.due_date, task.due_time)}
                     </div>
                     <span className={`assignment-priority ${task.priority}`}>
                       {task.priority} priority
@@ -236,7 +223,7 @@ export default function Assignments({
                     </div>
                   )}
                   <div className="assignment-due">
-                    📅 {formatDueDate(task.due_date, task.due_time)}
+                    📅 {formatDueDateWithTranslation(task.due_date, task.due_time)}
                   </div>
                   <span className={`assignment-priority ${task.priority}`}>
                     {task.priority} priority
@@ -282,7 +269,8 @@ export default function Assignments({
                     </div>
                   )}
                   <div className="assignment-due completed-date">
-                    ✅ {formatDueDate(task.due_date, task.due_time)}
+                    {task.submitted ? '📤' : '✅'} {formatDueDateWithTranslation(task.due_date, task.due_time)}
+                    {task.submitted && <span className="submitted-badge"> ({t("submitted")})</span>}
                   </div>
                 </div>
               )) : (

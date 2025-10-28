@@ -20,12 +20,14 @@ A personal dashboard application to help organize and track current courses, ass
 ### Installation
 
 1. Clone the repository:
+
    ```bash
    git clone <repository-url>
    cd Dashboard_canvers
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
