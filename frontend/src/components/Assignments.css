@@ -116,12 +116,20 @@
 }
 
 .assignment-card.overdue {
-  background: linear-gradient(135deg, var(--background-primary) 0%, rgba(239, 68, 68, 0.05) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--background-primary) 0%,
+    rgba(239, 68, 68, 0.05) 100%
+  );
   border-left-color: #ef4444;
 }
 
 .assignment-card.completed {
-  background: linear-gradient(135deg, var(--background-primary) 0%, rgba(16, 185, 129, 0.05) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--background-primary) 0%,
+    rgba(16, 185, 129, 0.05) 100%
+  );
   opacity: 0.8;
 }
 
@@ -244,8 +252,12 @@
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive Design */

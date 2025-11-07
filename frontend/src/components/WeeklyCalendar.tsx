@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
-import { useTasks, updateTaskAPI } from "../hooks/useApi";
+import { useTasks, updateTaskAPI, getTaskCanvasUrl } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDateLocal, formatMonthDay } from "../utils/dateUtils";
@@ -31,6 +31,8 @@ interface WeeklyCalendarProps {
   onDateSelect?: (date: Date) => void;
   onTaskClick?: (task: Task, date: Date) => void;
   selectedCourse?: string | null;
+  // Allow parent to change app tab (e.g., navigate to Assignments)
+  onTabChange?: (tab: "dashboard" | "assignments" | "account") => void;
 }
 
 interface WeekInfo {
@@ -48,6 +50,7 @@ export default function WeeklyCalendar({
   onDateSelect,
   onTaskClick,
   selectedCourse,
+  onTabChange,
 }: WeeklyCalendarProps) {
   const { t, language } = useLanguage(); // language 코드("ko" | "en")
   const { getCourseColor } = useCourseColors();
@@ -61,6 +64,8 @@ export default function WeeklyCalendar({
     task: Task;
     date: Date;
   } | null>(null);
+  // 과제를 due date 이전 며칠 동안 표시할지 설정 (기본값: 3일)
+  const [showTaskDaysBefore, setShowTaskDaysBefore] = useState<number>(3);
 
   useEffect(() => {
     // Update date when window gains focus
@@ -163,18 +168,19 @@ export default function WeeklyCalendar({
     return weeksList;
   };
 
-  // API tasks → DayTasks
+  // API tasks → DayTasks (모든 과제를 due date에만 배치)
   const convertTasksToDayTasks = (apiTasks: Task[]): DayTasks => {
     const dayTasks: DayTasks = {};
     if (!apiTasks) return dayTasks;
+
     apiTasks.forEach((task) => {
-      const dateKey = task.due_date;
-      if (!dayTasks[dateKey]) dayTasks[dateKey] = [];
-      dayTasks[dateKey].push(task);
+      const dueDateKey = task.due_date;
+      if (!dayTasks[dueDateKey]) dayTasks[dueDateKey] = [];
+      dayTasks[dueDateKey].push(task);
     });
+
     return dayTasks;
   };
-
   useEffect(() => {
     try {
       setWeeks(generateWeeks());
@@ -288,108 +294,361 @@ export default function WeeklyCalendar({
     <div className="weekly-calendar">
       <div className="calendar-header">
         <h2>{t("weekly_schedule") || "주간 일정"}</h2>
-        <p className="calendar-subtitle">
-          {weeks[0]?.startDate && weeks[3]?.endDate
-            ? formatWeekRangeWithLocale(weeks[0].startDate, weeks[3].endDate)
-            : "Loading..."}
-        </p>
+        <div className="calendar-header-controls">
+          <p className="calendar-subtitle">
+            {weeks[0]?.startDate && weeks[3]?.endDate
+              ? formatWeekRangeWithLocale(weeks[0].startDate, weeks[3].endDate)
+              : "Loading..."}
+          </p>
+          <div className="task-preview-control">
+            <label htmlFor="task-preview-days">
+              {language === "ko" ? "과제 미리보기:" : "Show tasks"}
+            </label>
+            <select
+              id="task-preview-days"
+              value={showTaskDaysBefore}
+              onChange={(e) => setShowTaskDaysBefore(Number(e.target.value))}
+              className="task-preview-select"
+            >
+              <option value={0}>
+                {language === "ko" ? "당일만" : "Due date only"}
+              </option>
+              <option value={1}>
+                {language === "ko" ? "1일 전부터" : "1 day before"}
+              </option>
+              <option value={2}>
+                {language === "ko" ? "2일 전부터" : "2 days before"}
+              </option>
+              <option value={3}>
+                {language === "ko" ? "3일 전부터" : "3 days before"}
+              </option>
+              <option value={5}>
+                {language === "ko" ? "5일 전부터" : "5 days before"}
+              </option>
+              <option value={7}>
+                {language === "ko" ? "7일 전부터" : "7 days before"}
+              </option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div className="weeks-container">
-        {weeks.map((week, weekIndex) => {
-          const isCurrentWeek = weekIndex === 1;
-          return (
-            <div
-              key={weekIndex}
-              className={`week-section ${isCurrentWeek ? "current-week" : ""}`}
-            >
-              <div className="week-header">
-                <span className="week-number">
-                  {t("week") || "Week"} {week.weekNumber}
-                </span>
-                <span className="week-range">
-                  {formatWeekRangeWithLocale(week.startDate, week.endDate)}
-                </span>
-                {isCurrentWeek && (
-                  <span className="current-week-badge">
-                    {t("current") || "Current"}
-                  </span>
-                )}
-              </div>
+        {(() => {
+          // 전체 4주에 대한 전역 task row mapping 생성
+          const globalTaskRows = new Map<string, number>();
+          const globalRowOccupancy: Array<Array<[number, number]>> = [];
 
-              <div className="days-grid">
-                {week.days.map((day, dayIndex) => {
-                  const dayTasks = getTasksForDate(day); // Show tasks for all weeks, not just current week
-                  return (
-                    <div
-                      key={dayIndex}
-                      className={`day-cell ${isToday(day) ? "today" : ""} ${
-                        isSelected(day) ? "selected" : ""
-                      }`}
-                      onClick={() => handleDateClick(day)}
-                    >
-                      <div className="day-info">
+          // 모든 주의 모든 과제 수집
+          const allWeekTasks: Array<{
+            task: Task;
+            weekIndex: number;
+            dayIndex: number;
+            startPos: number;
+            endPos: number;
+          }> = [];
+
+          weeks.forEach((week, weekIndex) => {
+            week.days.forEach((day, dayIndex) => {
+              const dayTasks = getTasksForDate(day);
+              dayTasks.forEach((task) => {
+                const totalDays = task.completed ? 1 : showTaskDaysBefore + 1;
+                const startPos = weekIndex * 7 + dayIndex - (totalDays - 1);
+                const endPos = weekIndex * 7 + dayIndex;
+
+                allWeekTasks.push({
+                  task,
+                  weekIndex,
+                  dayIndex,
+                  startPos,
+                  endPos,
+                });
+              });
+            });
+          });
+
+          // Due date 기준으로 정렬 (이른 날짜가 먼저 = 위쪽 row)
+          allWeekTasks.sort((a, b) => {
+            const dateA = new Date(a.task.due_date).getTime();
+            const dateB = new Date(b.task.due_date).getTime();
+            return dateA - dateB;
+          });
+
+          // 전역적으로 row 배치 (task.id 기준으로 같은 과제는 같은 row)
+          let nextAvailableRow = 0;
+
+          allWeekTasks.forEach((weekTask) => {
+            const taskKey = String(weekTask.task.id);
+
+            // 이미 배치된 과제면 스킵
+            if (globalTaskRows.has(taskKey)) return;
+
+            // nextAvailableRow부터 시작해서 빈 row 찾기
+            let foundRow = -1;
+            for (let row = nextAvailableRow; row < 100; row++) {
+              if (!globalRowOccupancy[row]) globalRowOccupancy[row] = [];
+
+              // 이 row에서 겹치는지 확인
+              const overlaps = globalRowOccupancy[row].some(
+                ([occStart, occEnd]) =>
+                  !(weekTask.endPos < occStart || weekTask.startPos > occEnd)
+              );
+
+              if (!overlaps) {
+                globalRowOccupancy[row].push([
+                  weekTask.startPos,
+                  weekTask.endPos,
+                ]);
+                globalTaskRows.set(taskKey, row);
+                foundRow = row;
+                break;
+              }
+            }
+
+            // 배치된 row가 nextAvailableRow이면, 다음 row로 이동
+            if (foundRow === nextAvailableRow) {
+              nextAvailableRow++;
+            }
+          });
+
+          return weeks.map((week, weekIndex) => {
+            const isCurrentWeek = weekIndex === 1;
+            return (
+              <div
+                key={weekIndex}
+                className={`week-section ${
+                  isCurrentWeek ? "current-week" : ""
+                }`}
+              >
+                <div className="week-header">
+                  <span className="week-number">
+                    {t("week") || "Week"} {week.weekNumber}
+                  </span>
+                  <span className="week-range">
+                    {formatWeekRangeWithLocale(week.startDate, week.endDate)}
+                  </span>
+                  {isCurrentWeek && (
+                    <span className="current-week-badge">
+                      {t("current") || "Current"}
+                    </span>
+                  )}
+                </div>
+
+                <div className="week-grid-container">
+                  {/* 날짜 헤더 */}
+                  <div className="week-days-header">
+                    {week.days.map((day, dayIndex) => (
+                      <div
+                        key={dayIndex}
+                        className={`day-header ${isToday(day) ? "today" : ""} ${
+                          isSelected(day) ? "selected" : ""
+                        }`}
+                        onClick={() => handleDateClick(day)}
+                      >
                         <div className="day-name">{dayNames[dayIndex]}</div>
                         <div className="day-number">{day.getDate()}</div>
                       </div>
+                    ))}
+                  </div>
 
-                      {dayTasks.length > 0 && (
-                        <div className="day-tasks">
-                          {dayTasks.slice(0, 5).map((task) => {
-                            const isHighlighted =
-                              !selectedCourse || task.course === selectedCourse;
-                            return (
-                              <div
-                                key={task.id}
-                                className={`task-item ${
-                                  task.completed ? "completed" : ""
-                                } ${isHighlighted ? "highlighted" : "dimmed"}`}
-                                style={{
-                                  backgroundColor: task.course
-                                    ? getCourseColor(task.course)
-                                    : getTaskTypeColor(task.type),
-                                  borderLeft: `3px solid ${getPriorityColor(
-                                    task.priority
-                                  )}`,
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleTaskClick(task, day);
-                                }}
-                                title={`${getTaskTypeIcon(task.type)} ${
-                                  task.title
-                                } - ${task.course || ""} (${
-                                  task.priority
-                                } priority)`}
-                              >
-                                <div className="task-title">
-                                  <span className="task-type-icon">
-                                    {getTaskTypeIcon(task.type)}
-                                  </span>
-                                  {task.title}
-                                </div>
-                                {task.due_time && (
-                                  <div className="task-time">
-                                    ⏰ {task.due_time}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {dayTasks.length > 5 && (
-                            <div className="more-tasks">
-                              +{dayTasks.length - 5} more
+                  {/* 과제 막대 컨테이너 (absolute positioning) */}
+                  <div
+                    className="week-tasks-container"
+                    style={{
+                      minHeight: (() => {
+                        // 이 주에 표시될 고유 과제들을 먼저 수집
+                        const uniqueTaskIds = new Set<number>();
+
+                        // 현재 주의 모든 과제 확인
+                        week.days.forEach((day) => {
+                          const dayTasks = getTasksForDate(day);
+                          dayTasks.forEach((task) => {
+                            uniqueTaskIds.add(task.id);
+                          });
+                        });
+
+                        // 다음 주 과제 중 현재 주로 넘어오는 것들도 확인
+                        if (weekIndex < weeks.length - 1) {
+                          const nextWeek = weeks[weekIndex + 1];
+                          nextWeek.days.slice(0, 7).forEach((day) => {
+                            const dayTasks = getTasksForDate(day);
+                            dayTasks.forEach((task) => {
+                              const totalDays = task.completed
+                                ? 1
+                                : showTaskDaysBefore + 1;
+                              const nextDayIndex = nextWeek.days.indexOf(day);
+                              const startPos =
+                                7 + nextDayIndex - (totalDays - 1);
+
+                              // 현재 주에 걸치는 과제만
+                              if (startPos < 7) {
+                                uniqueTaskIds.add(task.id);
+                              }
+                            });
+                          });
+                        }
+
+                        // 고유 과제들의 global row를 수집
+                        const globalRowsUsed = new Set<number>();
+                        uniqueTaskIds.forEach((taskId) => {
+                          const row = globalTaskRows.get(String(taskId)) ?? 0;
+                          globalRowsUsed.add(row);
+                        });
+
+                        // 로컬 row로 매핑 (0부터 시작)
+                        const sortedGlobalRows = Array.from(
+                          globalRowsUsed
+                        ).sort((a, b) => a - b);
+                        const localRowCount = sortedGlobalRows.length;
+                        const height = Math.max(localRowCount * 40, 40);
+                        console.log(
+                          `Week ${weekIndex}: ${uniqueTaskIds.size} tasks, ${localRowCount} local rows, height=${height}px`
+                        );
+                        return `${height}px`;
+                      })(),
+                    }}
+                  >
+                    {(() => {
+                      // 이 주의 모든 과제 수집
+                      const weekTasks: Array<{
+                        task: Task;
+                        dayIndex: number;
+                        startPos: number;
+                        endPos: number;
+                      }> = [];
+
+                      // 현재 주의 과제들
+                      week.days.forEach((day, dayIndex) => {
+                        const dayTasks = getTasksForDate(day);
+                        dayTasks.forEach((task) => {
+                          const totalDays = task.completed
+                            ? 1
+                            : showTaskDaysBefore + 1;
+                          const startPos = dayIndex - (totalDays - 1);
+                          const endPos = dayIndex;
+
+                          weekTasks.push({
+                            task,
+                            dayIndex,
+                            startPos,
+                            endPos,
+                          });
+                        });
+                      });
+
+                      // 다음 주 과제 중 현재 주로 넘어오는 것들
+                      if (weekIndex < weeks.length - 1) {
+                        const nextWeek = weeks[weekIndex + 1];
+                        nextWeek.days
+                          .slice(0, 7)
+                          .forEach((day, nextDayIndex) => {
+                            const dayTasks = getTasksForDate(day);
+                            dayTasks.forEach((task) => {
+                              const totalDays = task.completed
+                                ? 1
+                                : showTaskDaysBefore + 1;
+                              const startPos =
+                                7 + nextDayIndex - (totalDays - 1);
+
+                              if (startPos < 7) {
+                                const endPos = 7 + nextDayIndex;
+                                weekTasks.push({
+                                  task,
+                                  dayIndex: nextDayIndex,
+                                  startPos,
+                                  endPos,
+                                });
+                              }
+                            });
+                          });
+                      }
+
+                      // 전역 row를 로컬 row로 변환 (0부터 다시 시작)
+                      const globalRowsUsed = new Set<number>();
+                      weekTasks.forEach((weekTask) => {
+                        const globalRow =
+                          globalTaskRows.get(String(weekTask.task.id)) ?? 0;
+                        globalRowsUsed.add(globalRow);
+                      });
+
+                      // 정렬된 전역 row 리스트
+                      const sortedGlobalRows = Array.from(globalRowsUsed).sort(
+                        (a, b) => a - b
+                      );
+
+                      // 전역 row → 로컬 row 매핑
+                      const globalToLocalRow = new Map<number, number>();
+                      sortedGlobalRows.forEach((globalRow, localIndex) => {
+                        globalToLocalRow.set(globalRow, localIndex);
+                      });
+
+                      // 렌더링 (전역 row를 로컬 row로 변환해서 사용)
+                      return weekTasks.map((weekTask, taskIdx) => {
+                        const { task, dayIndex, startPos, endPos } = weekTask;
+                        const globalRow =
+                          globalTaskRows.get(String(task.id)) ?? 0;
+                        const row = globalToLocalRow.get(globalRow) ?? 0;
+
+                        const isHighlighted =
+                          !selectedCourse || task.course === selectedCourse;
+
+                        const totalDays = endPos - startPos + 1;
+
+                        // 현재 주 영역(0~6)에만 표시되도록 클리핑
+                        const clippedStartPos = Math.max(startPos, 0);
+                        const clippedEndPos = Math.min(endPos, 6);
+                        const clippedDays = clippedEndPos - clippedStartPos + 1;
+
+                        const barLeft = (clippedStartPos / 7) * 100;
+                        const barWidth = (clippedDays / 7) * 100;
+
+                        return (
+                          <div
+                            key={`${task.id}-${dayIndex}-${taskIdx}`}
+                            className={`task-bar-absolute ${
+                              task.completed ? "completed" : ""
+                            } ${isHighlighted ? "highlighted" : "dimmed"}`}
+                            style={{
+                              backgroundColor: task.course
+                                ? getCourseColor(task.course)
+                                : getTaskTypeColor(task.type),
+                              borderLeft: `3px solid ${getPriorityColor(
+                                task.priority
+                              )}`,
+                              left: `${barLeft}%`,
+                              width: `${barWidth}%`,
+                              top: `${row * 40}px`,
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTaskClick(task, week.days[dayIndex]);
+                            }}
+                            title={`${getTaskTypeIcon(task.type)} ${
+                              task.title
+                            } - ${task.course || ""} (${
+                              task.priority
+                            } priority)`}
+                          >
+                            <div className="task-title">
+                              {!task.completed
+                                ? `${task.title} (D-${totalDays - 1})`
+                                : task.title}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                            {task.due_time && (
+                              <div className="task-time">
+                                ⏰ {task.due_time}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          });
+        })()}
       </div>
 
       {/* Task Modal */}
@@ -530,6 +789,57 @@ export default function WeeklyCalendar({
                 {selectedTask.task.completed
                   ? t("mark_pending") || "Mark as Pending"
                   : t("mark_completed") || "Mark as Completed"}
+              </button>
+              <button
+                className="task-open-original-button"
+                onClick={async () => {
+                  try {
+                    const taskAny = selectedTask.task as any;
+                    const urlFromTask =
+                      taskAny.html_url ||
+                      taskAny.url ||
+                      taskAny.external_url ||
+                      taskAny.assignment_url ||
+                      (taskAny.plannable && taskAny.plannable.html_url) ||
+                      null;
+
+                    if (urlFromTask) {
+                      window.open(urlFromTask, "_blank");
+                      return;
+                    }
+
+                    // Try backend resolution (search Canvas assignments for this task)
+                    try {
+                      const res = await getTaskCanvasUrl(selectedTask.task.id);
+                      if (res && res.url) {
+                        window.open(res.url, "_blank");
+                        return;
+                      }
+                    } catch (e) {
+                      // resolution failed or not found; fallthrough to fallback
+                      console.warn("Canvas URL resolution failed:", e);
+                    }
+
+                    // Fallback: switch to Assignments tab and store task id for context
+                    try {
+                      localStorage.setItem(
+                        "dashboard_openTaskId",
+                        String(selectedTask.task.id)
+                      );
+                    } catch (e) {
+                      // ignore storage errors
+                    }
+                    if (typeof onTabChange === "function") {
+                      onTabChange("assignments");
+                    } else if (typeof window !== "undefined") {
+                      window.location.href = window.location.pathname;
+                    }
+                  } catch (error) {
+                    console.error("Error opening original assignment:", error);
+                  }
+                }}
+              >
+                {t("open_original") || "Open Original"}
               </button>
               <button
                 className="task-close-button"

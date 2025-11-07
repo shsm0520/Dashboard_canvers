@@ -196,6 +196,22 @@
   align-items: stretch;
 }
 
+.course-syllabus-button {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  background: linear-gradient(135deg, #06b6d4 0%, #14b8a6 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.course-syllabus-button:hover {
+  filter: brightness(1.03);
+}
+
 .course-card {
   background: var(--background-primary);
   padding: 1rem;

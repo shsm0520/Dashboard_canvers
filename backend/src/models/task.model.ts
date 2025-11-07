@@ -98,7 +98,10 @@ export const updateTask = async (
   }
 };
 
-export const deleteTask = async (taskId: number, userId: number): Promise<boolean> => {
+export const deleteTask = async (
+  taskId: number,
+  userId: number
+): Promise<boolean> => {
   try {
     const result = await runQuery(
       "DELETE FROM tasks WHERE id = ? AND user_id = ?",
@@ -124,4 +127,8 @@ export const getTaskByUserAndTitle = async (
 
 export const deleteAllUserTasks = async (userId: number): Promise<void> => {
   await runQuery("DELETE FROM tasks WHERE user_id = ?", [userId]);
+};
+
+export const getTaskById = async (taskId: number): Promise<Task | null> => {
+  return await getQuery("SELECT * FROM tasks WHERE id = ?", [taskId]);
 };

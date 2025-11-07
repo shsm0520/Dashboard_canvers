@@ -1,4 +1,4 @@
-import { getAllQuery, runQuery } from "../database";
+import { getAllQuery, runQuery, getQuery } from "../database";
 import { Course } from "../types";
 
 export const getUserCourses = async (userId: number): Promise<Course[]> => {
@@ -22,4 +22,20 @@ export const createCourse = async (
     "INSERT INTO courses (user_id, name, canvas_course_id, professor, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
     [userId, courseName, canvasCourseId, professor || null]
   );
+};
+
+export const getCourseByName = async (
+  userId: number,
+  courseName: string
+): Promise<Course | null> => {
+  return await getQuery(
+    "SELECT * FROM courses WHERE user_id = ? AND name = ?",
+    [userId, courseName]
+  );
+};
+
+export const getCourseById = async (
+  courseId: number
+): Promise<Course | null> => {
+  return await getQuery("SELECT * FROM courses WHERE id = ?", [courseId]);
 };

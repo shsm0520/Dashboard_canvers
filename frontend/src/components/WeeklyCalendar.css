@@ -1,7 +1,7 @@
 .weekly-calendar {
   background: var(--background-primary);
   border-radius: 16px;
-  padding: 1.0rem;
+  padding: 1rem;
   box-shadow: 0 4px 20px var(--shadow-light);
   border: 1px solid var(--border-color);
   backdrop-filter: blur(10px);
@@ -10,6 +10,47 @@
 .calendar-header {
   margin-bottom: 1.5rem;
   text-align: center;
+}
+
+.calendar-header-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.task-preview-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.task-preview-control label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.task-preview-select {
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--background-primary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.task-preview-select:hover {
+  border-color: #6366f1;
+}
+
+.task-preview-select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .calendar-header h2 {
@@ -30,6 +71,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  overflow: hidden; /* 주 영역 밖으로 나가는 막대 숨김 */
 }
 
 .week-section {
@@ -43,6 +85,7 @@
   grid-template-columns: 90px 1fr;
   gap: 0.5rem;
   align-items: center;
+  overflow: hidden; /* 주 영역 밖으로 나가는 막대 숨김 */
 }
 
 .week-section:hover {
@@ -88,6 +131,122 @@
   width: 100%;
 }
 
+/* New week grid container */
+.week-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-x: hidden; /* 좌우만 자름 */
+  overflow-y: visible; /* 높이는 자동 */
+}
+
+.week-days-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.375rem;
+}
+
+.day-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.15rem 0.1rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid transparent;
+}
+
+.day-header:hover {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.day-header.today {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.week-tasks-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+  grid-auto-rows: 40px; /* 고정 높이 */
+}
+
+/* Absolute positioning 컨테이너 */
+.week-tasks-container {
+  position: relative;
+  min-height: 50px; /* 충분한 높이 확보 */
+  width: 100%;
+  overflow-x: hidden; /* 좌우만 자름 */
+  margin-top: 0.5rem; /* 날짜 헤더와 간격 */
+}
+
+.task-bar-absolute {
+  position: absolute;
+  height: 36px;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  color: white;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.task-bar-absolute:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.task-bar-absolute.completed {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.task-bar-absolute.dimmed {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+}
+
+.task-bar-item {
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  color: white;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 36px; /* 고정 높이 */
+  overflow: hidden; /* 넘치는 내용 숨김 */
+}
+
+.task-bar-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.task-bar-item.completed {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.task-bar-item.dimmed {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+}
+
 .day-cell {
   display: flex;
   flex-direction: column;
@@ -127,16 +286,16 @@
 }
 
 .day-name {
-  font-size: 0.7rem;
+  font-size: 0.55rem;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.05rem;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.1px;
 }
 
 .day-number {
-  font-size: 1rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -242,15 +401,11 @@
 
 .task-title {
   font-weight: 600;
-  line-height: 1.2;
-  display: flex;
-  align-items: center;
-  gap: 0.2rem;
-}
-
-.task-type-icon {
-  font-size: 0.65rem;
-  flex-shrink: 0;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0; /* 줄어들지 않도록 */
 }
 
 .task-time {
@@ -260,6 +415,9 @@
   display: flex;
   align-items: center;
   gap: 0.2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .more-tasks {
@@ -497,6 +655,36 @@
   transform: translateY(-1px);
 }
 
+/* Secondary button for opening original Canvas page */
+.task-open-original-button {
+  padding: 0.72rem 1.25rem;
+  /* new distinct teal gradient background */
+  background: linear-gradient(135deg, #06b6d4 0%, #14b8a6 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.18s ease;
+}
+
+.task-open-original-button:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.12);
+}
+
+/* Allow buttons to wrap on small screens so they don't overflow the modal */
+.task-modal-footer {
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 /* Tablet styles */
 @media (min-width: 577px) and (max-width: 768px) {
   .weekly-calendar {
@@ -536,7 +724,7 @@
   }
 
   .day-number {
-    font-size: 0.9rem;
+    font-size: 0.3rem;
   }
 }
 
@@ -651,24 +839,22 @@
 
   /* .week-section {
     /* padding: 1.25rem; */
-  } */
+}
+*/ .days-grid {
+  gap: 0.75rem;
+}
 
-  .days-grid {
-    gap: 0.75rem;
-  }
+.day-cell {
+  padding: 1rem 0.75rem;
+  /* min-height: 70px; */
+}
 
-  .day-cell {
-    padding: 1rem 0.75rem;
-    /* min-height: 70px; */
-  }
+.day-name {
+  font-size: 0.75rem;
+}
 
-  .day-name {
-    font-size: 0.75rem;
-  }
-
-  .day-number {
-    font-size: 1.1rem;
-  }
+.day-number {
+  font-size: 1.1rem;
 }
 
 /* Large desktop */

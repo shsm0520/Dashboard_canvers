@@ -1,4 +1,3 @@
-import React from "react";
 import { useTasks, updateTaskAPI } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -10,8 +9,8 @@ import "./Assignments.css";
 interface AssignmentsProps {
   user: { username: string };
   onLogout: () => void;
-  currentTab: 'dashboard' | 'assignments' | 'account';
-  onTabChange: (tab: 'dashboard' | 'assignments' | 'account') => void;
+  currentTab: "dashboard" | "assignments" | "account";
+  onTabChange: (tab: "dashboard" | "assignments" | "account") => void;
 }
 
 export default function Assignments({
@@ -35,17 +34,14 @@ export default function Assignments({
     data: tasksData,
     isLoading: tasksLoading,
     error: tasksError,
-  } = useTasks(
-    formatDateLocal(oneMonthAgo),
-    formatDateLocal(twoMonthsFromNow)
-  );
+  } = useTasks(formatDateLocal(oneMonthAgo), formatDateLocal(twoMonthsFromNow));
 
   const handleToggleComplete = async (taskId: number, completed: boolean) => {
     try {
       await updateTaskAPI(taskId, { completed: !completed });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     } catch (error) {
-      console.error('Error updating task:', error);
+      console.error("Error updating task:", error);
     }
   };
 
@@ -71,9 +67,18 @@ export default function Assignments({
     });
 
     return {
-      pending: pending.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()),
-      overdue: overdue.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime()),
-      completed: completed.sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime()),
+      pending: pending.sort(
+        (a, b) =>
+          new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+      ),
+      overdue: overdue.sort(
+        (a, b) =>
+          new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+      ),
+      completed: completed.sort(
+        (a, b) =>
+          new Date(b.due_date).getTime() - new Date(a.due_date).getTime()
+      ),
     };
   };
 
@@ -143,7 +148,9 @@ export default function Assignments({
             </div>
             <div className="stat completed">
               <span className="stat-number">{completed.length}</span>
-              <span className="stat-label">{t("completed") || "Completed"}</span>
+              <span className="stat-label">
+                {t("completed") || "Completed"}
+              </span>
             </div>
           </div>
         </div>
@@ -152,20 +159,29 @@ export default function Assignments({
           {/* Overdue Assignments */}
           {overdue.length > 0 && (
             <section className="assignment-section overdue-section">
-              <h2>⚠️ {t("overdue_assignments") || "Overdue Assignments"} ({overdue.length})</h2>
+              <h2>
+                ⚠️ {t("overdue_assignments") || "Overdue Assignments"} (
+                {overdue.length})
+              </h2>
               <div className="assignments-grid">
                 {overdue.map((task: any) => (
                   <div
                     key={task.id}
                     className="assignment-card overdue"
-                    style={{ borderLeftColor: task.course ? getCourseColor(task.course) : '#ef4444' }}
+                    style={{
+                      borderLeftColor: task.course
+                        ? getCourseColor(task.course)
+                        : "#ef4444",
+                    }}
                   >
                     <div className="assignment-header">
                       <h3>{task.title}</h3>
                       <input
                         type="checkbox"
                         checked={task.completed}
-                        onChange={() => handleToggleComplete(task.id, task.completed)}
+                        onChange={() =>
+                          handleToggleComplete(task.id, task.completed)
+                        }
                         className="assignment-checkbox"
                       />
                     </div>
@@ -174,14 +190,18 @@ export default function Assignments({
                         className="assignment-course"
                         style={{
                           backgroundColor: getCourseColor(task.course),
-                          color: 'white'
+                          color: "white",
                         }}
                       >
                         {task.course}
                       </div>
                     )}
                     <div className="assignment-due overdue-date">
-                      📅 {formatDueDateWithTranslation(task.due_date, task.due_time)}
+                      📅{" "}
+                      {formatDueDateWithTranslation(
+                        task.due_date,
+                        task.due_time
+                      )}
                     </div>
                     <span className={`assignment-priority ${task.priority}`}>
                       {task.priority} priority
@@ -194,44 +214,61 @@ export default function Assignments({
 
           {/* Pending Assignments */}
           <section className="assignment-section pending-section">
-            <h2>📋 {t("upcoming_assignments") || "Upcoming Assignments"} ({pending.length})</h2>
+            <h2>
+              📋 {t("upcoming_assignments") || "Upcoming Assignments"} (
+              {pending.length})
+            </h2>
             <div className="assignments-grid">
-              {pending.length > 0 ? pending.map((task: any) => (
-                <div
-                  key={task.id}
-                  className="assignment-card pending"
-                  style={{ borderLeftColor: task.course ? getCourseColor(task.course) : '#6b7280' }}
-                >
-                  <div className="assignment-header">
-                    <h3>{task.title}</h3>
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={() => handleToggleComplete(task.id, task.completed)}
-                      className="assignment-checkbox"
-                    />
-                  </div>
-                  {task.course && (
-                    <div
-                      className="assignment-course"
-                      style={{
-                        backgroundColor: getCourseColor(task.course),
-                        color: 'white'
-                      }}
-                    >
-                      {task.course}
+              {pending.length > 0 ? (
+                pending.map((task: any) => (
+                  <div
+                    key={task.id}
+                    className="assignment-card pending"
+                    style={{
+                      borderLeftColor: task.course
+                        ? getCourseColor(task.course)
+                        : "#6b7280",
+                    }}
+                  >
+                    <div className="assignment-header">
+                      <h3>{task.title}</h3>
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={() =>
+                          handleToggleComplete(task.id, task.completed)
+                        }
+                        className="assignment-checkbox"
+                      />
                     </div>
-                  )}
-                  <div className="assignment-due">
-                    📅 {formatDueDateWithTranslation(task.due_date, task.due_time)}
+                    {task.course && (
+                      <div
+                        className="assignment-course"
+                        style={{
+                          backgroundColor: getCourseColor(task.course),
+                          color: "white",
+                        }}
+                      >
+                        {task.course}
+                      </div>
+                    )}
+                    <div className="assignment-due">
+                      📅{" "}
+                      {formatDueDateWithTranslation(
+                        task.due_date,
+                        task.due_time
+                      )}
+                    </div>
+                    <span className={`assignment-priority ${task.priority}`}>
+                      {task.priority} priority
+                    </span>
                   </div>
-                  <span className={`assignment-priority ${task.priority}`}>
-                    {task.priority} priority
-                  </span>
-                </div>
-              )) : (
+                ))
+              ) : (
                 <div className="no-assignments">
-                  <p>{t("no_upcoming_assignments") || "No upcoming assignments"}</p>
+                  <p>
+                    {t("no_upcoming_assignments") || "No upcoming assignments"}
+                  </p>
                 </div>
               )}
             </div>
@@ -239,43 +276,66 @@ export default function Assignments({
 
           {/* Completed Assignments */}
           <section className="assignment-section completed-section">
-            <h2>✅ {t("completed_assignments") || "Completed Assignments"} ({completed.length})</h2>
+            <h2>
+              ✅ {t("completed_assignments") || "Completed Assignments"} (
+              {completed.length})
+            </h2>
             <div className="assignments-grid">
-              {completed.length > 0 ? completed.slice(0, 20).map((task: any) => (
-                <div
-                  key={task.id}
-                  className="assignment-card completed"
-                  style={{ borderLeftColor: task.course ? getCourseColor(task.course) : '#10b981' }}
-                >
-                  <div className="assignment-header">
-                    <h3>{task.title}</h3>
-                    <input
-                      type="checkbox"
-                      checked={task.completed}
-                      onChange={() => handleToggleComplete(task.id, task.completed)}
-                      className="assignment-checkbox"
-                    />
-                  </div>
-                  {task.course && (
-                    <div
-                      className="assignment-course"
-                      style={{
-                        backgroundColor: getCourseColor(task.course),
-                        color: 'white',
-                        opacity: 0.7
-                      }}
-                    >
-                      {task.course}
+              {completed.length > 0 ? (
+                completed.slice(0, 20).map((task: any) => (
+                  <div
+                    key={task.id}
+                    className="assignment-card completed"
+                    style={{
+                      borderLeftColor: task.course
+                        ? getCourseColor(task.course)
+                        : "#10b981",
+                    }}
+                  >
+                    <div className="assignment-header">
+                      <h3>{task.title}</h3>
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={() =>
+                          handleToggleComplete(task.id, task.completed)
+                        }
+                        className="assignment-checkbox"
+                      />
                     </div>
-                  )}
-                  <div className="assignment-due completed-date">
-                    {task.submitted ? '📤' : '✅'} {formatDueDateWithTranslation(task.due_date, task.due_time)}
-                    {task.submitted && <span className="submitted-badge"> ({t("submitted")})</span>}
+                    {task.course && (
+                      <div
+                        className="assignment-course"
+                        style={{
+                          backgroundColor: getCourseColor(task.course),
+                          color: "white",
+                          opacity: 0.7,
+                        }}
+                      >
+                        {task.course}
+                      </div>
+                    )}
+                    <div className="assignment-due completed-date">
+                      {task.submitted ? "📤" : "✅"}{" "}
+                      {formatDueDateWithTranslation(
+                        task.due_date,
+                        task.due_time
+                      )}
+                      {task.submitted && (
+                        <span className="submitted-badge">
+                          {" "}
+                          ({t("submitted")})
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )) : (
+                ))
+              ) : (
                 <div className="no-assignments">
-                  <p>{t("no_completed_assignments") || "No completed assignments"}</p>
+                  <p>
+                    {t("no_completed_assignments") ||
+                      "No completed assignments"}
+                  </p>
                 </div>
               )}
             </div>

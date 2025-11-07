@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useProfile, useCourses } from "../hooks/useApi";
 import { getToken } from "../utils/authUtils";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -9,8 +9,8 @@ import "./AccountManagement.css";
 interface AccountManagementProps {
   user: { username: string };
   onLogout: () => void;
-  currentTab: 'dashboard' | 'assignments' | 'account';
-  onTabChange: (tab: 'dashboard' | 'assignments' | 'account') => void;
+  currentTab: "dashboard" | "assignments" | "account";
+  onTabChange: (tab: "dashboard" | "assignments" | "account") => void;
 }
 
 export default function AccountManagement({
@@ -23,7 +23,7 @@ export default function AccountManagement({
   const queryClient = useQueryClient();
   const [canvasToken, setCanvasToken] = useState("");
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">(
     "success"
@@ -50,33 +50,32 @@ export default function AccountManagement({
       return;
     }
 
-    setLoading(true);
-    try {
-      const token = getToken();
-      const response = await fetch("http://localhost:5000/api/canvas-token", {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ canvasToken: canvasToken.trim() }),
-      });
+    startTransition(async () => {
+      try {
+        const token = getToken();
+        const response = await fetch("http://localhost:5000/api/canvas-token", {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ canvasToken: canvasToken.trim() }),
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (data.success) {
-        showMessage(data.message || t("token_updated"), "success");
-        setIsEditing(false);
-        setCanvasToken("");
-        refetchProfile();
-      } else {
-        showMessage(data.message || "Failed to update Canvas token", "error");
+        if (data.success) {
+          showMessage(data.message || t("token_updated"), "success");
+          setIsEditing(false);
+          setCanvasToken("");
+          refetchProfile();
+        } else {
+          showMessage(data.message || "Failed to update Canvas token", "error");
+        }
+      } catch (error) {
+        showMessage(t("network_error"), "error");
       }
-    } catch (error) {
-      showMessage(t("network_error"), "error");
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleDeleteToken = async () => {
@@ -84,96 +83,122 @@ export default function AccountManagement({
       return;
     }
 
-    setLoading(true);
-    try {
-      const token = getToken();
-      const response = await fetch("http://localhost:5000/api/canvas-token", {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+    startTransition(async () => {
+      try {
+        const token = getToken();
+        const response = await fetch("http://localhost:5000/api/canvas-token", {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (data.success) {
-        showMessage(t("token_removed"), "success");
-        refetchProfile();
-      } else {
-        showMessage(data.message || "Failed to remove Canvas token", "error");
+        if (data.success) {
+          showMessage(t("token_removed"), "success");
+          refetchProfile();
+        } else {
+          showMessage(data.message || "Failed to remove Canvas token", "error");
+        }
+      } catch (error) {
+        showMessage(t("network_error"), "error");
       }
-    } catch (error) {
-      showMessage(t("network_error"), "error");
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleSyncCanvas = async () => {
-    setLoading(true);
-    try {
-      const token = getToken();
-      const response = await fetch("http://localhost:5000/api/courses/sync-canvas-assignments", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
-          "X-Client-Timezone-Offset": new Date().getTimezoneOffset().toString(),
-        },
-      });
+    startTransition(async () => {
+      try {
+        const token = getToken();
+        const response = await fetch(
+          "http://localhost:5000/api/courses/sync-canvas-assignments",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "X-Client-Timezone":
+                Intl.DateTimeFormat().resolvedOptions().timeZone,
+              "X-Client-Timezone-Offset": new Date()
+                .getTimezoneOffset()
+                .toString(),
+            },
+          }
+        );
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (data.success) {
-        // Invalidate all relevant queries to refresh data
-        await queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        await queryClient.invalidateQueries({ queryKey: ['courses'] });
-        showMessage(`Canvas synced: ${data.assignmentCount} assignments, ${data.moduleItemCount || 0} module items`, "success");
-      } else {
-        showMessage(data.message || "Failed to sync Canvas assignments", "error");
+        if (data.success) {
+          // Invalidate all relevant queries to refresh data
+          await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          await queryClient.invalidateQueries({ queryKey: ["courses"] });
+          showMessage(
+            `Canvas synced: ${data.assignmentCount} assignments, ${
+              data.moduleItemCount || 0
+            } module items`,
+            "success"
+          );
+        } else {
+          showMessage(
+            data.message || "Failed to sync Canvas assignments",
+            "error"
+          );
+        }
+      } catch (error) {
+        showMessage(t("network_error"), "error");
       }
-    } catch (error) {
-      showMessage(t("network_error"), "error");
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleResetAndSync = async () => {
-    if (!confirm("This will delete ALL existing tasks and re-sync from Canvas. Are you sure?")) {
+    if (
+      !confirm(
+        "This will delete ALL existing tasks and re-sync from Canvas. Are you sure?"
+      )
+    ) {
       return;
     }
 
-    setLoading(true);
-    try {
-      const token = getToken();
-      const response = await fetch("http://localhost:5000/api/courses/reset-and-sync-canvas", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
-          "X-Client-Timezone-Offset": new Date().getTimezoneOffset().toString(),
-        },
-      });
+    startTransition(async () => {
+      try {
+        const token = getToken();
+        const response = await fetch(
+          "http://localhost:5000/api/courses/reset-and-sync-canvas",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "X-Client-Timezone":
+                Intl.DateTimeFormat().resolvedOptions().timeZone,
+              "X-Client-Timezone-Offset": new Date()
+                .getTimezoneOffset()
+                .toString(),
+            },
+          }
+        );
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (data.success) {
-        // Invalidate all relevant queries to refresh data
-        await queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        await queryClient.invalidateQueries({ queryKey: ['courses'] });
-        showMessage(`Reset complete! ${data.courses} courses, ${data.assignments} assignments, ${data.moduleItems || 0} module items synced.`, "success");
-      } else {
-        showMessage(data.message || "Failed to reset and sync", "error");
+        if (data.success) {
+          // Invalidate all relevant queries to refresh data
+          await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          await queryClient.invalidateQueries({ queryKey: ["courses"] });
+          showMessage(
+            `Reset complete! ${data.courses} courses, ${
+              data.assignments
+            } assignments, ${data.moduleItems || 0} module items synced.`,
+            "success"
+          );
+        } else {
+          showMessage(data.message || "Failed to reset and sync", "error");
+        }
+      } catch (error) {
+        showMessage(t("network_error"), "error");
       }
-    } catch (error) {
-      showMessage(t("network_error"), "error");
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   if (profileLoading) {
@@ -192,7 +217,10 @@ export default function AccountManagement({
       <div className="account-container">
         <div className="account-error">
           <p>Failed to load account information</p>
-          <button onClick={() => onTabChange('dashboard')} className="back-button">
+          <button
+            onClick={() => onTabChange("dashboard")}
+            className="back-button"
+          >
             {t("back_to_dashboard")}
           </button>
         </div>
@@ -272,7 +300,7 @@ export default function AccountManagement({
                     onChange={(e) => setCanvasToken(e.target.value)}
                     placeholder="Enter your Canvas API token..."
                     className="token-input"
-                    disabled={loading}
+                    disabled={isPending}
                   />
                   <small className="help-text">
                     Get your API token from Canvas → Account → Settings →
@@ -283,9 +311,9 @@ export default function AccountManagement({
                   <button
                     onClick={handleUpdateToken}
                     className="save-button"
-                    disabled={loading || !canvasToken.trim()}
+                    disabled={isPending || !canvasToken.trim()}
                   >
-                    {loading ? t("saving") : t("save_token")}
+                    {isPending ? t("saving") : t("save_token")}
                   </button>
                   <button
                     onClick={() => {
@@ -293,7 +321,7 @@ export default function AccountManagement({
                       setCanvasToken("");
                     }}
                     className="cancel-button"
-                    disabled={loading}
+                    disabled={isPending}
                   >
                     {t("cancel")}
                   </button>
@@ -304,7 +332,7 @@ export default function AccountManagement({
                 <button
                   onClick={() => setIsEditing(true)}
                   className="edit-button"
-                  disabled={loading}
+                  disabled={isPending}
                 >
                   {profileData?.profile?.hasCanvasToken
                     ? t("update_token")
@@ -315,23 +343,23 @@ export default function AccountManagement({
                     <button
                       onClick={handleSyncCanvas}
                       className="sync-button"
-                      disabled={loading}
+                      disabled={isPending}
                     >
-                      {loading ? "Syncing..." : "🔄 Sync Canvas"}
+                      {isPending ? "Syncing..." : "🔄 Sync Canvas"}
                     </button>
                     <button
                       onClick={handleResetAndSync}
                       className="reset-button"
-                      disabled={loading}
+                      disabled={isPending}
                     >
-                      {loading ? "Resetting..." : "🔄 Reset & Re-sync All"}
+                      {isPending ? "Resetting..." : "🔄 Reset & Re-sync All"}
                     </button>
                     <button
                       onClick={handleDeleteToken}
                       className="delete-button"
-                      disabled={loading}
+                      disabled={isPending}
                     >
-                      {loading ? t("removing") : t("remove_token")}
+                      {isPending ? t("removing") : t("remove_token")}
                     </button>
                   </>
                 )}
