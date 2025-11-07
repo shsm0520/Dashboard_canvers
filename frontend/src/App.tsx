@@ -42,8 +42,11 @@ function App() {
               headers: {
                 Authorization: `Bearer ${token}`,
                 "Content-Type": "application/json",
-                "X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
-                "X-Client-Timezone-Offset": new Date().getTimezoneOffset().toString(),
+                "X-Client-Timezone":
+                  Intl.DateTimeFormat().resolvedOptions().timeZone,
+                "X-Client-Timezone-Offset": new Date()
+                  .getTimezoneOffset()
+                  .toString(),
               },
             });
 
@@ -110,7 +113,7 @@ function App() {
       case "dashboard":
         return (
           <Dashboard
-            user={user}
+            user={user!}
             onLogout={handleLogout}
             currentTab={currentTab}
             onTabChange={setCurrentTab}
@@ -119,7 +122,7 @@ function App() {
       case "assignments":
         return (
           <Assignments
-            user={user}
+            user={user!}
             onLogout={handleLogout}
             currentTab={currentTab}
             onTabChange={setCurrentTab}
@@ -128,7 +131,7 @@ function App() {
       case "account":
         return (
           <AccountManagement
-            user={user}
+            user={user!}
             onLogout={handleLogout}
             currentTab={currentTab}
             onTabChange={setCurrentTab}
@@ -139,11 +142,7 @@ function App() {
     }
   };
 
-  return (
-    <>
-      {user ? renderCurrentTab() : <Login onLogin={handleLogin} />}
-    </>
-  );
+  return <>{user ? renderCurrentTab() : <Login onLogin={handleLogin} />}</>;
 }
 
 export default App;
