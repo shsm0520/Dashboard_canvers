@@ -33,7 +33,7 @@ export const logSync = async (
 ): Promise<void> => {
   try {
     await runQuery(
-      "INSERT INTO sync_logs (user_id, last_sync_at, sync_type, status, assignments_count, modules_count, error_message) VALUES (?, datetime('now'), ?, ?, ?, ?, ?)",
+      "INSERT INTO sync_logs (user_id, last_sync_at, sync_type, status, assignments_count, modules_count, error_message) VALUES (?, NOW(), ?, ?, ?, ?, ?)",
       [
         userId,
         syncType,

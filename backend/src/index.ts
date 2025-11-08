@@ -71,7 +71,8 @@ const startServer = async () => {
     app.listen(config.port, () => {
       console.log(`Server running on port ${config.port}`);
       console.log("JWT Secret:", config.jwtSecret.substring(0, 20) + "...");
-      console.log("Database: SQLite");
+      console.log("Database: MariaDB");
+      console.log(`Database Host: ${config.db.host}:${config.db.port}`);
       console.log(
         "Protected endpoints: /api/me, /api/courses, /api/profile, /api/analytics"
       );
