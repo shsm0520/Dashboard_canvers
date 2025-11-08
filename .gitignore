@@ -119,7 +119,6 @@ Thumbs.db
 *.db
 
 # Docker
-Dockerfile*
 docker-compose*.yml
 .dockerignore
 
