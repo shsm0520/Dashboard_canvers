@@ -1,4 +1,4 @@
-import React from "react";
+import { useState, useTransition } from "react";
 import { useCourses, useTasks } from "../hooks/useApi";
 import { useCourseColors } from "../hooks/useCourseColors";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -6,6 +6,7 @@ import { formatDateLocal } from "../utils/dateUtils";
 import Header from "./Header";
 import WeeklyCalendar from "./WeeklyCalendar";
 import "./Dashboard.css";
+import { getCourseSyllabusUrl } from "../hooks/useApi";
 
 interface DashboardProps {
   user: { username: string };
@@ -22,9 +23,8 @@ export default function Dashboard({
 }: DashboardProps) {
   const { t } = useLanguage();
   const { getCourseColor } = useCourseColors();
-  const [selectedCourse, setSelectedCourse] = React.useState<string | null>(
-    null
-  );
+  const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const {
     data: coursesData,
@@ -78,12 +78,36 @@ export default function Dashboard({
                     borderBottomColor: getCourseColor(course.name),
                   }}
                   onClick={() =>
-                    setSelectedCourse(
-                      selectedCourse === course.name ? null : course.name
-                    )
+                    startTransition(() => {
+                      setSelectedCourse(
+                        selectedCourse === course.name ? null : course.name
+                      );
+                    })
                   }
                 >
                   <h3>{course.name}</h3>
+                  {course.canvas_course_id && (
+                    <button
+                      className="course-syllabus-button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        startTransition(() => {
+                          getCourseSyllabusUrl(course.id)
+                            .then((res) => {
+                              if (res && res.url) {
+                                window.open(res.url, "_blank");
+                              }
+                            })
+                            .catch((err) => {
+                              console.error("Failed to open syllabus:", err);
+                            });
+                        });
+                      }}
+                      disabled={isPending}
+                    >
+                      {isPending ? "Loading..." : "Syllabus"}
+                    </button>
+                  )}
                   {course.professor && course.professor !== "N/A" && (
                     <p>
                       <strong>Course Code:</strong> {course.professor}
@@ -164,6 +188,7 @@ export default function Dashboard({
           <WeeklyCalendar
             onDateSelect={(date) => console.log("Selected date:", date)}
             selectedCourse={selectedCourse}
+            onTabChange={onTabChange}
           />
         </div>
 
